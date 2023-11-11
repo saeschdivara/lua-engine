@@ -1,4 +1,5 @@
 use clap::Parser;
+use nom_tester::lua::parse_file;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -9,5 +10,8 @@ struct Args {
 }
 
 fn main() {
+    let args = Args::parse();
+    parse_file(args.input_path.as_str()).unwrap();
+
     println!("{:?}", nom_tester::hex_color("#2F14DF"))
 }
