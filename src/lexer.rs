@@ -7,11 +7,8 @@ use nom::sequence::Tuple;
 
 use crate::ast::{Keyword, Number, Token};
 
-pub struct LuaCode {
-    pub code: String,
-}
-
-pub fn lex_lua(content: &str) -> IResult<&str, LuaCode> {
+pub fn lex_lua(content: &str) -> IResult<&str, Vec<Token>> {
+    let mut tokens = vec![];
     let mut rest_code = content;
     while let Ok((unparsed_code, matched_content)) = alt((
         parse_space,
@@ -24,12 +21,11 @@ pub fn lex_lua(content: &str) -> IResult<&str, LuaCode> {
         parse_operators,
         parse_other_tokens,
     ))(rest_code) {
-        println!("Token: {:?}", matched_content);
+        tokens.push(matched_content);
         rest_code = unparsed_code;
     }
 
-
-    Ok((rest_code, LuaCode { code: "".to_string() }))
+    Ok((rest_code, tokens))
 }
 
 fn parse_space(input: &str) -> IResult<&str, Token> {
