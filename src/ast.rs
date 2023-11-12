@@ -41,7 +41,11 @@ pub enum Number {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Token {
     Invalid,
+
+    Comment { literal: String },
+
     WhiteSpace { count: u8 },
+    NewLine {},
     String { literal: String, quote: char },
 
     // any string of Latin letters, Arabic-Indic digits, and underscores,
@@ -72,7 +76,9 @@ pub enum Token {
     TildeEqual {},
     LowerEqual {},
     GreaterEqual {},
+    // <
     Lower {},
+    // >
     Greater {},
     Equal {},
 
