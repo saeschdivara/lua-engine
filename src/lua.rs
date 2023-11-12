@@ -3,11 +3,11 @@ use std::error::Error;
 use nom::{InputTakeAtPosition, IResult};
 use nom::branch::alt;
 use nom::bytes::complete::{is_a, is_not, tag};
-use nom::character::complete::{newline, space1};
+use nom::character::complete::{digit1, newline, space1};
 use nom::error::ErrorKind;
 use nom::sequence::Tuple;
 
-use crate::ast::{Keyword, Token};
+use crate::ast::{Keyword, Number, Token};
 
 pub fn parse_file(path: &str) -> Result<(), Box<dyn Error>> {
     let file_content = std::fs::read_to_string(path)?;
@@ -27,7 +27,9 @@ fn parse_lua(content: &str) -> IResult<&str, LuaCode> {
         parse_space,
         parse_line_breaks,
         parse_comment,
+        parse_number,
         parse_identifier,
+        parse_empty_string_token,
         parse_string_token,
         parse_operators,
         parse_other_tokens,
@@ -50,6 +52,15 @@ fn parse_line_breaks(input: &str) -> IResult<&str, Token> {
     Ok((unparsed_code, Token::NewLine {}))
 }
 
+fn parse_empty_string_token(input: &str) -> IResult<&str, Token> {
+    let (unparsed_code, (_, _)) = (
+        tag("\""),
+        tag("\""),
+    ).parse(input)?;
+
+    Ok((unparsed_code, Token::String { quote: '"', literal: "".to_string() }))
+}
+
 fn parse_string_token(input: &str) -> IResult<&str, Token> {
     let (unparsed_code, (_, matched_content, _)) = (
         tag("\""),
@@ -68,6 +79,15 @@ fn parse_comment(input: &str) -> IResult<&str, Token> {
     ).parse(input)?;
 
     Ok((unparsed_code, Token::Comment { literal: matched_content.to_string() }))
+}
+
+fn parse_number(input: &str) -> IResult<&str, Token> {
+    let (unparsed_code, matched_content) = digit1(input)?;
+
+    Ok((unparsed_code, Token::Number {
+        literal: matched_content.to_string().clone(),
+        value: Number::Int(matched_content.parse().unwrap())
+    }))
 }
 
 fn parse_operators(input: &str) -> IResult<&str, Token> {
@@ -144,6 +164,8 @@ fn parse_identifier(input: &str) -> IResult<&str, Token> {
             "local" => Token::Keyword { literal: Keyword::Local },
             "then" => Token::Keyword { literal: Keyword::Then },
             "end" => Token::Keyword { literal: Keyword::End },
+            "for" => Token::Keyword { literal: Keyword::For },
+            "do" => Token::Keyword { literal: Keyword::Do },
             "return" => Token::Keyword { literal: Keyword::Return },
             "function" => Token::Keyword { literal: Keyword::Function },
             "if" => Token::Keyword { literal: Keyword::If },
