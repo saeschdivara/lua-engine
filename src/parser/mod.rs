@@ -1,12 +1,11 @@
+mod expression;
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::ast::{Keyword, Token};
+use crate::parser::expression::{Expression, parse_expression};
 
-#[derive(Debug, Clone)]
-pub enum Expression {
-    Variable { name: String }
-}
 
 #[derive(Debug, Clone)]
 pub struct Statement {
@@ -80,9 +79,9 @@ fn parse_next_statement(mut tokens: Vec<Token>) -> Result<(Vec<Token>, Statement
 fn parse_local_statement(mut tokens: Vec<Token>) -> Result<(Vec<Token>, Statement), Box<dyn Error>> {
     let mut stmt = Statement { expressions: vec![] };
     let current_token = tokens.remove(0);
-    match current_token {
+    match current_token.clone() {
         Token::Identifier { literal } => {
-            stmt.expressions.push(Expression::Variable { name: literal })
+            stmt.expressions.push(Expression::Variable { name: literal, token: current_token })
         },
         _ => return Err(Box::new(ParsingError::new("Local expects identifier")))
     };
@@ -103,8 +102,4 @@ fn parse_local_statement(mut tokens: Vec<Token>) -> Result<(Vec<Token>, Statemen
     };
 
     Ok((tokens, stmt))
-}
-
-fn parse_expression(mut tokens: Vec<Token>) -> Result<(Vec<Token>, Expression), Box<dyn Error>> {
-    Err(Box::new(ParsingError::new("Could not parse expression")))
 }
