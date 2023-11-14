@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::ast::{Keyword, Token};
@@ -34,6 +35,20 @@ impl Error for ParsingError {}
 impl Display for ParsingError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Could not parse it: {}", self.message)
+    }
+}
+
+struct Parser {
+    prefix_parse_fns: HashMap<Token, fn(Vec<Token>) -> Result<(Vec<Token>, Expression), Box<dyn Error>>>,
+    infix_parse_fns: HashMap<Token, fn(Expression, Vec<Token>) -> Result<(Vec<Token>, Expression), Box<dyn Error>>>
+}
+
+impl Parser {
+    fn new() -> Self {
+        let prefix_parse_fns = Default::default();
+        let infix_parse_fns = Default::default();
+
+        return Self { prefix_parse_fns, infix_parse_fns };
     }
 }
 
