@@ -47,17 +47,31 @@ impl Parser {
     pub fn parse_lua_ast(&self, mut token_stream: Vec<Token>) -> Result<LuaCode, Box<dyn Error>> {
         let mut statements = vec![];
 
-        while let Ok((tokens, stmt)) = self.parse_next_statement(token_stream) {
-            println!("Stmt: {:?}", stmt.clone());
-            statements.push(stmt);
-            token_stream = tokens;
+        loop {
+            match self.parse_next_statement(token_stream) {
+                Ok((tokens, stmt)) => {
+                    println!("Stmt: {:?}", stmt.clone());
+                    statements.push(stmt);
+                    token_stream = tokens;
+                }
+                Err(err) => {
+                    println!("{}", err);
+                    break
+                }
+            }
         }
 
         Ok(LuaCode { statements })
     }
 
     fn parse_next_statement(&self, mut tokens: Vec<Token>) -> Result<(Vec<Token>, Statement), Box<dyn Error>> {
-        let current_token = tokens.remove(0);
+        let mut current_token = tokens.remove(0);
+        let nl = Token::NewLine {};
+
+        while current_token == nl {
+            current_token = tokens.remove(0);
+        }
+
         match current_token {
             Token::Keyword { literal } => {
                 match literal {
