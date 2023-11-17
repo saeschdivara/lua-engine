@@ -3,10 +3,16 @@ use crate::ast::{Number, Token};
 use crate::parser::{Parser, ParsingError};
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum Table {
+    Array(Vec<Expression>)
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Variable { name: String, token: Token },
     String { value: String, token: Token },
     Number { value: Number, token: Token },
+    Table { value: Table, token: Token },
 }
 
 pub type ExpressionParsingResult = Result<(Vec<Token>, Expression), Box<dyn Error>>;
@@ -70,6 +76,44 @@ impl Parser {
         }
     }
 
+    pub(crate) fn parse_table(&self, current_token: Token, mut tokens: Vec<Token>) -> ExpressionParsingResult {
+        if let Token::LeftCurlyBracket {} = current_token.clone() {
+            let mut values = vec![];
+
+            loop {
+                let current_token = tokens.remove(0);
+
+                match current_token {
+                    Token::RightCurlyBracket { .. } => {
+                        break
+                    }
+                    Token::Comma {} | Token::NewLine {} => {
+                        continue
+                    }
+                    _ => {
+                        tokens.insert(0, current_token.clone());
+                        match self.parse_expression(tokens.clone(), OperatorPrecedence::Lowest) {
+                            Ok((new_tokens, expr)) => {
+                                tokens = new_tokens;
+                                values.push(expr);
+                            }
+                            Err(e) => {
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok((
+                tokens,
+                Expression::Table { value: Table::Array(values), token: current_token, }
+            ))
+        } else {
+            Err(Box::new(ParsingError::new("Token is not a {")))
+        }
+    }
+
     fn parse_variable(&self, current_token: Token, mut tokens: Vec<Token>) -> ExpressionParsingResult {
         if let Token::Identifier { literal } = current_token.clone() {
             Ok((
@@ -126,6 +170,40 @@ mod tests {
                 assert_eq!(tokens.len(), 1);
 
                 let expected_expr = Expression::Number { value: Number::Int(5), token };
+                assert_eq!(expected_expr, expr);
+            }
+            Err(msg) => {
+                assert_eq!(true, false, "Parsing expression failed: {:?}", msg);
+                return;
+            }
+        }
+    }
+
+    #[test]
+    fn parse_table_list_expr() {
+        let token = Token::Number { value: Number::Int(5), literal: "5".to_string() };
+        let tokens = vec![
+            Token::LeftCurlyBracket {},
+            token.clone(),
+            Token::Comma {},
+            token.clone(),
+            Token::RightCurlyBracket {},
+            Token::SemiColon {},
+        ];
+
+        let parser = Parser::new();
+
+        match parser.parse_expression(tokens, OperatorPrecedence::Lowest) {
+            Ok((tokens, expr)) => {
+                assert_eq!(tokens.len(), 1);
+
+                let expected_expr = Expression::Table { value:
+                    Table::Array(vec![
+                        Expression::Number { value: Number::Int(5), token: token.clone() },
+                        Expression::Number { value: Number::Int(5), token: token.clone() },
+                    ]),
+                    token: Token::LeftCurlyBracket {}
+                };
                 assert_eq!(expected_expr, expr);
             }
             Err(msg) => {

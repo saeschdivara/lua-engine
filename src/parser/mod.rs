@@ -115,6 +115,7 @@ impl Parser {
         match token {
             Token::String { .. } => Some(Parser::parse_string),
             Token::Number { .. } => Some(Parser::parse_number),
+            Token::LeftCurlyBracket { .. } => Some(Parser::parse_table),
             _ => None
         }
     }
