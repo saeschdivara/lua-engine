@@ -114,6 +114,7 @@ impl Parser {
     fn get_prefix_parser(&self, token: &Token) -> Option<fn(&Parser, Token, Vec<Token>) -> ExpressionParsingResult> {
         match token {
             Token::String { .. } => Some(Parser::parse_string),
+            Token::Number { .. } => Some(Parser::parse_number),
             _ => None
         }
     }

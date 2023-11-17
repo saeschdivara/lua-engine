@@ -1,11 +1,12 @@
 use std::error::Error;
-use crate::ast::Token;
+use crate::ast::{Number, Token};
 use crate::parser::{Parser, ParsingError};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Variable { name: String, token: Token },
-    String { value: String, token: Token }
+    String { value: String, token: Token },
+    Number { value: Number, token: Token },
 }
 
 pub type ExpressionParsingResult = Result<(Vec<Token>, Expression), Box<dyn Error>>;
@@ -41,7 +42,9 @@ impl Parser {
         if let Some(prefix_function) = self.get_prefix_parser(&current_token) {
             prefix_function(self, current_token, tokens)
         } else {
-            Err(Box::new(ParsingError::new("No parsing function found for token")))
+            Err(Box::new(ParsingError::new(
+                format!("No parsing function found for token {:?}", current_token).as_str()
+            )))
         }
     }
 
@@ -52,7 +55,18 @@ impl Parser {
                 Expression::String { value: literal, token: current_token }
             ))
         } else {
-            Err(Box::new(ParsingError::new("Token is not an identifier")))
+            Err(Box::new(ParsingError::new("Token is not a string")))
+        }
+    }
+
+    pub(crate) fn parse_number(&self, current_token: Token, mut tokens: Vec<Token>) -> ExpressionParsingResult {
+        if let Token::Number { value, .. } = current_token.clone() {
+            Ok((
+                tokens,
+                Expression::Number { value, token: current_token }
+            ))
+        } else {
+            Err(Box::new(ParsingError::new("Token is not a number")))
         }
     }
 
@@ -74,7 +88,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn parse_string_expr() {
         let string_token = Token::String { literal: "String Content".to_string(), quote: '"' };
         let tokens = vec![
             string_token.clone(),
@@ -88,6 +102,30 @@ mod tests {
                 assert_eq!(tokens.len(), 1);
 
                 let expected_expr = Expression::String { value: "String Content".to_string(), token: string_token };
+                assert_eq!(expected_expr, expr);
+            }
+            Err(msg) => {
+                assert_eq!(true, false, "Parsing expression failed: {:?}", msg);
+                return;
+            }
+        }
+    }
+
+    #[test]
+    fn parse_number_expr() {
+        let token = Token::Number { value: Number::Int(5), literal: "5".to_string() };
+        let tokens = vec![
+            token.clone(),
+            Token::SemiColon {},
+        ];
+
+        let parser = Parser::new();
+
+        match parser.parse_expression(tokens, OperatorPrecedence::Lowest) {
+            Ok((tokens, expr)) => {
+                assert_eq!(tokens.len(), 1);
+
+                let expected_expr = Expression::Number { value: Number::Int(5), token };
                 assert_eq!(expected_expr, expr);
             }
             Err(msg) => {
