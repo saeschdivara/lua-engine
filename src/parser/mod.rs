@@ -6,7 +6,7 @@ use crate::parser::expression::{Expression, ExpressionParsingResult, OperatorPre
 
 mod expression;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Statement {
     pub expressions: Vec<Expression>,
 }
@@ -89,6 +89,21 @@ impl Parser {
         match current_token.clone() {
             Token::Identifier { literal } => {
                 stmt.expressions.push(Expression::Variable { name: literal, token: current_token })
+            }
+            Token::Keyword { literal } => {
+                return match literal {
+                    Keyword::Function => {
+                        match self.parse_function(current_token, tokens) {
+                            Ok((tokens, expr)) => {
+                                stmt.expressions.push(expr);
+                                Ok((tokens, stmt))
+                            }
+
+                            Err(e) => Err(e)
+                        }
+                    }
+                    _ => Err(Box::new(ParsingError::new("Wrong keyword used after local")))
+                }
             }
             _ => return Err(Box::new(ParsingError::new("Local expects identifier")))
         };
