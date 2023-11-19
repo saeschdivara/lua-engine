@@ -172,7 +172,12 @@ impl Parser {
 
                     match peek_token {
                         Token::Keyword { literal: Keyword::End } => {
+                            tokens_alias.remove(0);
                             break
+                        },
+                        Token::NewLine {} => {
+                            tokens_alias.remove(0);
+                            continue
                         },
                         _ => {
                             match self.parse_next_statement(tokens_alias) {
@@ -188,8 +193,6 @@ impl Parser {
                 } else {
                     return Err(Box::new(ParsingError::new("Missing token")))
                 }
-
-                break
             }
 
             Ok((tokens_alias, Expression::Function {
@@ -293,10 +296,16 @@ mod tests {
 
     #[test]
     fn parse_local_function_expr() {
-        let function_name_tok = Token::Identifier { literal: "_I".to_string() };
-        let param_name_tok = Token::Identifier { literal: "msg".to_string() };
-        let var_name_tok = Token::Identifier { literal: "x".to_string() };
-        let value_token = Token::Number { value: Number::Int(5), literal: "5".to_string() };
+        let function_name = "_I".to_string();
+        let function_name_tok = Token::Identifier { literal: function_name.clone() };
+        let param_name = "msg".to_string();
+        let param_name_tok = Token::Identifier { literal: param_name.clone() };
+        let var_name = "x".to_string();
+        let var_name_tok = Token::Identifier { literal: var_name.clone() };
+
+        let number_value = Number::Int(5);
+        let value_token = Token::Number { value: number_value.clone(), literal: "5".to_string() };
+
         let tokens = vec![
             Token::Keyword { literal: Keyword::Function },
             function_name_tok.clone(),
@@ -317,17 +326,32 @@ mod tests {
 
         match parser.parse_local_statement(tokens) {
             Ok((tokens, stmt)) => {
-                println!("Stmt: {:?}", stmt);
-                assert_eq!(tokens.len(), 1);
+                assert_eq!(tokens.len(), 0);
 
-                // let expected_expr = Expression::Table { value:
-                //     Table::Array(vec![
-                //         Expression::Number { value: Number::Int(5), token: function_name_tok.clone() },
-                //         Expression::Number { value: Number::Int(5), token: function_name_tok.clone() },
-                //     ]),
-                //     token: Token::LeftCurlyBracket {}
-                // };
-                // assert_eq!(expected_expr, stmt);
+                let expected_stmt = Statement {
+                    expressions: vec![
+                        Expression::Function {
+                            name: Some(function_name),
+                            parameters: vec![
+                                Expression::Variable {
+                                    name: param_name,
+                                    token: param_name_tok,
+                                }
+                            ],
+                            body: vec![
+                                Statement {
+                                    expressions: vec![
+                                        Expression::Variable { name: var_name, token: var_name_tok },
+                                        Expression::Number { value: number_value, token: value_token }
+                                    ],
+                                }
+                            ],
+                            token: Token::Invalid,
+                        }
+                    ],
+                };
+
+                assert_eq!(expected_stmt, stmt);
             }
             Err(msg) => {
                 assert_eq!(true, false, "Parsing expression failed: {:?}", msg);
