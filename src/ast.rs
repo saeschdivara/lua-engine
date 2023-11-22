@@ -32,7 +32,7 @@ pub enum Keyword {
     While,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Number {
     Int(i64),
     Float(f64),
@@ -103,4 +103,9 @@ pub enum Token {
     Dot {},
     DoubleDot {},
     TripleDot {},
+}
+
+#[derive(Debug, Clone)]
+pub struct TokenStream {
+    pub tokens: Vec<Token>
 }

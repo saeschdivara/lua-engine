@@ -5,9 +5,9 @@ use nom::character::complete::*;
 use nom::error::ErrorKind;
 use nom::sequence::Tuple;
 
-use crate::ast::{Keyword, Number, Token};
+use crate::ast::{Keyword, Number, Token, TokenStream};
 
-pub fn lex_lua(content: &str) -> IResult<&str, Vec<Token>> {
+pub fn lex_lua(content: &str) -> IResult<&str, TokenStream> {
     let mut tokens = vec![];
     let mut rest_code = content;
     while let Ok((unparsed_code, matched_content)) = alt((
@@ -25,7 +25,7 @@ pub fn lex_lua(content: &str) -> IResult<&str, Vec<Token>> {
         rest_code = unparsed_code;
     }
 
-    Ok((rest_code, tokens))
+    Ok((rest_code, TokenStream { tokens, }))
 }
 
 fn parse_space(input: &str) -> IResult<&str, Token> {

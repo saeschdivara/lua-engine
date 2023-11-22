@@ -1,10 +1,15 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
-use crate::ast::{Keyword, Token};
-use crate::parser::expression::{Expression, ExpressionParsingResult, OperatorPrecedence};
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::IResult;
+
+use crate::ast::{Keyword, Token, TokenStream};
+use crate::parser::expression::Expression;
 
 mod expression;
+mod traits;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Statement {
@@ -44,97 +49,32 @@ impl Parser {
         Self {}
     }
 
-    pub fn parse_lua_ast(&self, mut token_stream: Vec<Token>) -> Result<LuaCode, Box<dyn Error>> {
-        let mut statements = vec![];
-
-        loop {
-            match self.parse_next_statement(token_stream) {
-                Ok((tokens, stmt)) => {
-                    println!("Stmt: {:?}", stmt.clone());
-                    statements.push(stmt);
-                    token_stream = tokens;
-                }
-                Err(err) => {
-                    println!("{}", err);
-                    break
-                }
-            }
-        }
+    pub fn parse_lua_ast(&self, mut token_stream: TokenStream) -> Result<LuaCode, Box<dyn Error>> {
+        let ((remaining_tokens, statements)) = self.parse_ast(token_stream)?;
+        println!("Tokens: {:?}", remaining_tokens);
 
         Ok(LuaCode { statements })
     }
 
-    fn parse_next_statement(&self, mut tokens: Vec<Token>) -> Result<(Vec<Token>, Statement), Box<dyn Error>> {
-        let mut current_token = tokens.remove(0);
-        let nl = Token::NewLine {};
+    fn parse_ast(&self, token_stream: TokenStream) -> IResult<TokenStream, Vec<Statement>> {
+        let (remaining_tokens, stmt) = alt((
+            Parser::parse_local,
+            Parser::parse_function,
+        ))(token_stream)?;
 
-        while current_token == nl {
-            current_token = tokens.remove(0);
-        }
+        println!("Statement: {:?}", stmt);
 
-        match current_token {
-            Token::Keyword { literal } => {
-                match literal {
-                    Keyword::Local => self.parse_local_statement(tokens),
-                    _ => Err(Box::new(ParsingError::new("Invalid keyword for statement beginning")))
-                }
-            }
-            Token::Identifier {literal} => {
-                Err(Box::new(ParsingError::new("Cannot handle identifier statements")))
-            }
-            _ => Err(Box::new(ParsingError::new("Statement has to begin with keyword")))
-        }
+        Ok((remaining_tokens, vec![]))
     }
 
-    fn parse_local_statement(&self, mut tokens: Vec<Token>) -> Result<(Vec<Token>, Statement), Box<dyn Error>> {
-        let mut stmt = Statement { expressions: vec![] };
-        let current_token = tokens.remove(0);
-        match current_token.clone() {
-            Token::Identifier { literal } => {
-                stmt.expressions.push(Expression::Variable { name: literal, token: current_token })
-            }
-            Token::Keyword { literal } => {
-                return match literal {
-                    Keyword::Function => {
-                        match self.parse_function(current_token, tokens) {
-                            Ok((tokens, expr)) => {
-                                stmt.expressions.push(expr);
-                                Ok((tokens, stmt))
-                            }
-
-                            Err(e) => Err(e)
-                        }
-                    }
-                    _ => Err(Box::new(ParsingError::new("Wrong keyword used after local")))
-                }
-            }
-            _ => return Err(Box::new(ParsingError::new("Local expects identifier")))
-        };
-
-        let current_token = tokens.remove(0);
-        match current_token {
-            Token::Equal { .. } => {}
-            _ => return Err(Box::new(ParsingError::new("Expect = after identifier")))
-        };
-
-        let (mut tokens, value) = self.parse_expression(tokens, OperatorPrecedence::Lowest)?;
-        stmt.expressions.push(value);
-
-        let current_token = tokens.remove(0);
-        match current_token {
-            Token::SemiColon { .. } => {}
-            _ => return Err(Box::new(ParsingError::new("Statement has to end with ;")))
-        };
-
-        Ok((tokens, stmt))
+    fn parse_local(token_stream: TokenStream) -> IResult<TokenStream, Statement> {
+        let (_, remaining_tokens) = tag(Token::Keyword { literal: Keyword::Local })(token_stream)?;
+        Ok((remaining_tokens, Statement { expressions: vec![]}))
     }
 
-    fn get_prefix_parser(&self, token: &Token) -> Option<fn(&Parser, Token, Vec<Token>) -> ExpressionParsingResult> {
-        match token {
-            Token::String { .. } => Some(Parser::parse_string),
-            Token::Number { .. } => Some(Parser::parse_number),
-            Token::LeftCurlyBracket { .. } => Some(Parser::parse_table),
-            _ => None
-        }
+    fn parse_function(token_stream: TokenStream) -> IResult<TokenStream, Statement> {
+        // let (remaining_tokens, _) = tag(Token::Keyword { literal: Keyword::Local })(token_stream)?;
+        Ok((token_stream, Statement { expressions: vec![]}))
     }
+
 }
