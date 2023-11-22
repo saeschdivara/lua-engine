@@ -79,6 +79,9 @@ impl Parser {
                     _ => Err(Box::new(ParsingError::new("Invalid keyword for statement beginning")))
                 }
             }
+            Token::Identifier {literal} => {
+                Err(Box::new(ParsingError::new("Cannot handle identifier statements")))
+            }
             _ => Err(Box::new(ParsingError::new("Statement has to begin with keyword")))
         }
     }
