@@ -6,15 +6,12 @@ use nom::bytes::complete::tag;
 use nom::IResult;
 
 use crate::ast::{Keyword, Token, TokenStream};
-use crate::parser::expression::Expression;
+use crate::parser::statement::Statement;
 
 mod expression;
 mod traits;
+mod statement;
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Statement {
-    pub expressions: Vec<Expression>,
-}
 
 pub struct LuaCode {
     pub statements: Vec<Statement>,
@@ -41,15 +38,14 @@ impl Display for ParsingError {
     }
 }
 
-pub struct Parser {
-}
+pub struct Parser;
 
 impl Parser {
     pub fn new() -> Self {
         Self {}
     }
 
-    pub fn parse_lua_ast(&self, mut token_stream: TokenStream) -> Result<LuaCode, Box<dyn Error>> {
+    pub fn parse_lua_ast(&self, token_stream: TokenStream) -> Result<LuaCode, Box<dyn Error>> {
         let ((remaining_tokens, statements)) = self.parse_ast(token_stream)?;
         println!("Tokens: {:?}", remaining_tokens);
 
@@ -69,12 +65,15 @@ impl Parser {
 
     fn parse_local(token_stream: TokenStream) -> IResult<TokenStream, Statement> {
         let (_, remaining_tokens) = tag(Token::Keyword { literal: Keyword::Local })(token_stream)?;
-        Ok((remaining_tokens, Statement { expressions: vec![]}))
+        let (variable, remaining_tokens) = tag(Token::Identifier {literal: "".to_string()})(remaining_tokens)?;
+        println!("xxx: {:?}", variable);
+
+        Ok((remaining_tokens, Statement::Invalid {}))
     }
 
     fn parse_function(token_stream: TokenStream) -> IResult<TokenStream, Statement> {
         // let (remaining_tokens, _) = tag(Token::Keyword { literal: Keyword::Local })(token_stream)?;
-        Ok((token_stream, Statement { expressions: vec![]}))
+        Ok((token_stream, Statement::Invalid {}))
     }
 
 }

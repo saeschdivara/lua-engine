@@ -59,7 +59,7 @@ impl Compare<Token> for TokenStream {
 
         match pos {
             Some(first_token) => {
-                if t == *first_token {
+                if std::mem::discriminant(&t) == std::mem::discriminant(first_token) {
                     CompareResult::Ok
                 } else {
                     CompareResult::Error
