@@ -65,15 +65,26 @@ impl Parser {
 
     fn parse_local(token_stream: TokenStream) -> IResult<TokenStream, Statement> {
         let (_, remaining_tokens) = tag(Token::Keyword { literal: Keyword::Local })(token_stream)?;
-        let (variable, remaining_tokens) = tag(Token::Identifier {literal: "".to_string()})(remaining_tokens)?;
+        let (variable, remaining_tokens) = tag(Token::Identifier { literal: "".to_string() })(remaining_tokens)?;
+        let (_, remaining_tokens) = tag(Token::Equal {})(remaining_tokens)?;
+
+        let mut value = vec![];
+        let mut rest = remaining_tokens;
+        while let Ok((remaining_tokens, val)) = alt((
+            tag(Token::String { quote: '"', literal: "".to_string() }),
+            tag(Token::String { quote: '"', literal: "".to_string() }),
+        ))(rest) {
+            value.push(val);
+            rest = remaining_tokens;
+        }
+
         println!("xxx: {:?}", variable);
 
-        Ok((remaining_tokens, Statement::Invalid {}))
+        Ok((rest, Statement::Invalid {}))
     }
 
     fn parse_function(token_stream: TokenStream) -> IResult<TokenStream, Statement> {
         // let (remaining_tokens, _) = tag(Token::Keyword { literal: Keyword::Local })(token_stream)?;
         Ok((token_stream, Statement::Invalid {}))
     }
-
 }
