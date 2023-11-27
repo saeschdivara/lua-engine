@@ -18,6 +18,7 @@ pub enum Expression {
 
 pub type ExpressionParsingResult = Result<(Vec<Token>, Expression), Box<dyn Error>>;
 
+#[derive(Clone, Copy)]
 pub enum OperatorPrecedence {
     Lowest = 0,
     Or = 1,
@@ -44,6 +45,34 @@ pub enum OperatorPrecedence {
 }
 
 impl Parser {
+    pub(crate) fn parse_expressions_until(
+        &self,
+        mut tokens: Vec<Token>,
+        mut separation_token: Vec<Token>,
+        precedence: OperatorPrecedence
+    ) -> Result<(Vec<Token>, Vec<Expression>), Box<dyn Error>> {
+
+        let mut result_expressions = vec![];
+        let mut rest_tokens = tokens;
+
+        while let Some(token) = rest_tokens.get(0) {
+            let token_type = std::mem::discriminant(token);
+            let is_end = separation_token
+                .iter()
+                .filter(|t| std::mem::discriminant(*t) == token_type)
+                .collect::<Vec<&Token>>()
+                .len() > 0;
+
+            if is_end { break }
+
+            let (tokens, expr) = self.parse_expression(rest_tokens, precedence)?;
+            rest_tokens = tokens;
+            result_expressions.push(expr);
+        }
+
+        Ok((rest_tokens, result_expressions))
+    }
+
     pub(crate) fn parse_expression(&self, mut tokens: Vec<Token>, precedence: OperatorPrecedence) -> ExpressionParsingResult {
         let current_token = tokens.remove(0);
         if let Some(prefix_function) = self.get_prefix_parser(&current_token) {
@@ -211,6 +240,33 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_multiple_expressions_until_semicolon_with_num() {
+        let token = Token::Number { value: Number::Int(5), literal: "5".to_string() };
+        let separate_token = Token::SemiColon {};
+
+        let tokens = vec![
+            token.clone(),
+            separate_token.clone(),
+        ];
+
+        let parser = Parser::new();
+
+        match parser.parse_expressions_until(tokens, vec![separate_token], OperatorPrecedence::Lowest) {
+            Ok((tokens, expressions)) => {
+                assert_eq!(tokens.len(), 1);
+                assert_eq!(expressions.len(), 1);
+
+                let expected_expr = Expression::Number { value: Number::Int(5), token };
+                assert_eq!(vec![expected_expr], expressions);
+            }
+            Err(msg) => {
+                assert_eq!(true, false, "Parsing expression failed: {:?}", msg);
+                return;
+            }
+        }
+    }
 
     #[test]
     fn parse_string_expr() {

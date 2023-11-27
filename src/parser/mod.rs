@@ -80,6 +80,18 @@ impl Parser {
                 }
             }
             Token::Identifier {literal} => {
+                let (updated_tokens, path_tokens) = self.parse_identifier_path(tokens)?;
+                let ident_token = Token::Identifier {literal: literal + "." + &*path_tokens };
+                let operation_token = updated_tokens.get(0).unwrap();
+
+                match operation_token {
+                    Token::Equal { .. } => return Err(Box::new(ParsingError::new("Variable assignment is not yet supported"))),
+                    Token::LeftParen { .. } => {
+                        //
+                    },
+                    _ => return Err(Box::new(ParsingError::new("Unsupported operation detected")))
+                }
+
                 Err(Box::new(ParsingError::new("Cannot handle identifier statements")))
             }
             _ => Err(Box::new(ParsingError::new("Statement has to begin with keyword")))
@@ -127,6 +139,33 @@ impl Parser {
         };
 
         Ok((tokens, stmt))
+    }
+
+    fn parse_identifier_path(&self, mut tokens: Vec<Token>) -> Result<(Vec<Token>, String), Box<dyn Error>> {
+        let mut token_path = vec![];
+        loop {
+            if let Some(peek_token) = tokens.get(0) {
+                match peek_token {
+                    Token::Identifier { .. } | Token::Dot {} => {
+                        let token = tokens.remove(0);
+                        token_path.push(token);
+                    }
+                    _ => {
+                        break
+                    }
+                }
+            } else {
+                return Err(Box::new(ParsingError::new("End of token stream when expecting more")));
+            }
+        }
+
+        let path = token_path.iter().map(|t| match t {
+            Token::Identifier { literal } => literal.clone(),
+            Token::Dot {} => ".".to_string(),
+            _ => panic!("This should never happen")
+        }).collect::<Vec<String>>().join("");
+
+        return Ok((tokens, path));
     }
 
     fn get_prefix_parser(&self, token: &Token) -> Option<fn(&Parser, Token, Vec<Token>) -> ExpressionParsingResult> {
