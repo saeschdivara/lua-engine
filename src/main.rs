@@ -1,5 +1,5 @@
 use clap::Parser;
-use my_gamma_script::parsing::lexer::{Lexer, TokenType};
+use my_gamma_script::parsing::parser::Parser as MyParser;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -14,10 +14,10 @@ fn main() {
     let contents = std::fs::read_to_string(args.path)
         .expect("Should have been able to read the file");
     
-    let mut lexer = Lexer::new(contents);
-    while let tok = lexer.next_token() {
-        if tok.token_type == TokenType::Eof { break }
+    let mut p = MyParser::new(contents);
+    let program = p.parse_program();
 
-        println!("{:?}", tok);
-    }
+    program.statements
+        .iter()
+        .for_each(|stmt| { println!("{}", stmt.to_string()); });
 }
