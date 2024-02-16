@@ -36,7 +36,7 @@ pub enum TokenType {
     DoubleColon,
     SemiColon,
     Colon,
-    Coma,
+    Comma,
     Dot,
     DoubleDot,
     TripleDot,
@@ -69,12 +69,28 @@ pub enum TokenType {
 impl TokenType {
     pub fn from_string(input: String) -> Self {
         match input.as_str() {
-            "function" => TokenType::Function,
-            "if" => TokenType::If,
-            "then" => TokenType::Then,
+            "and" => TokenType::And,
+            "break" => TokenType::Break,
+            "do" => TokenType::Do,
             "else" => TokenType::Else,
+            "elseif" => TokenType::ElseIf,
             "end" => TokenType::End,
+            "false" => TokenType::False,
+            "for" => TokenType::For,
+            "function" => TokenType::Function,
+            "goto" => TokenType::Goto,
+            "if" => TokenType::If,
+            "in" => TokenType::In,
+            "local" => TokenType::Local,
+            "nil" => TokenType::Nil,
+            "not" => TokenType::Not,
+            "or" => TokenType::Or,
+            "repeat" => TokenType::Repeat,
             "return" => TokenType::Return,
+            "then" => TokenType::Then,
+            "true" => TokenType::True,
+            "until" => TokenType::Until,
+            "while" => TokenType::While,
             _ => TokenType::Identifier,
         }
     }
@@ -130,7 +146,7 @@ impl Lexer {
 
         let tok = if let Some(ch) = self.ch {
             match ch {
-                ',' => Token::new(TokenType::Coma, ch.to_string()),
+                ',' => Token::new(TokenType::Comma, ch.to_string()),
                 '=' => {
                     if let Some(other_character) = self.peek_char() && other_character == '=' {
                         self.read_char();
@@ -147,8 +163,17 @@ impl Lexer {
                 '{' => Token::new(TokenType::LeftBrace, ch.to_string()),
                 '}' => Token::new(TokenType::RightBrace, ch.to_string()),
                 ';' => Token::new(TokenType::SemiColon, ch.to_string()),
+                ':' => Token::new(TokenType::Colon, ch.to_string()),
+                '.' => Token::new(TokenType::Dot, ch.to_string()),
+                '/' => Token::new(TokenType::Slash, ch.to_string()),
+                '#' => Token::new(TokenType::Hash, ch.to_string()),
+                '&' => Token::new(TokenType::Ampersand, ch.to_string()),
+                '~' => Token::new(TokenType::Tilde, ch.to_string()),
+                '%' => Token::new(TokenType::Percent, ch.to_string()),
+                '|' => Token::new(TokenType::Bar, ch.to_string()),
+                '^' => Token::new(TokenType::Caret, ch.to_string()),
                 _ => {
-                    if self.is_character(ch) {
+                    if self.is_character(ch, false) {
                         let identifier = self.read_identifier();
                         Token::new(TokenType::from_string(identifier.clone()), identifier)
                     }
@@ -186,7 +211,7 @@ impl Lexer {
         }
 
         while let Some(ch) = self.peek_char() {
-            if !self.is_character(ch) { break }
+            if !self.is_character(ch, true) { break }
 
             identifier.push(ch);
             self.read_char();
@@ -240,8 +265,8 @@ impl Lexer {
         }
     }
 
-    fn is_character(&self, c: char) -> bool {
-        return c.is_alphabetic() || c == '_';
+    fn is_character(&self, c: char, allow_numbers: bool) -> bool {
+        return (!allow_numbers && c.is_alphabetic()) || (allow_numbers && c.is_alphanumeric()) || c == '_';
     }
 
     fn is_digit(&self, c: char, is_hex: bool) -> bool {
@@ -263,7 +288,7 @@ mod tests {
             Token::new(TokenType::RightParen, ")".to_string()),
             Token::new(TokenType::LeftBrace, "{".to_string()),
             Token::new(TokenType::RightBrace, "}".to_string()),
-            Token::new(TokenType::Coma, ",".to_string()),
+            Token::new(TokenType::Comma, ",".to_string()),
             Token::new(TokenType::SemiColon, ";".to_string()),
         ];
         let mut lexer = Lexer::new(input.to_string());
@@ -329,8 +354,18 @@ mod tests {
                 return n * fact(n-1)
             end
         end
+
+        function norm (x, y)
+            local n2 = x^2 + y^2
+            return math.sqrt(n2)
+        end
+
+        function twice (x)
+            return 2*x
+        end
         "#;
         let expected_tokens = vec![
+            // function fact
             Token::new(TokenType::Function, "function".to_string()),
             Token::new(TokenType::Identifier, "fact".to_string()),
             Token::new(TokenType::LeftParen, "(".to_string()),
@@ -354,6 +389,45 @@ mod tests {
             Token::new(TokenType::Int, "1".to_string()),
             Token::new(TokenType::RightParen, ")".to_string()),
             Token::new(TokenType::End, "end".to_string()),
+            Token::new(TokenType::End, "end".to_string()),
+
+            // function norm
+            Token::new(TokenType::Function, "function".to_string()),
+            Token::new(TokenType::Identifier, "norm".to_string()),
+            Token::new(TokenType::LeftParen, "(".to_string()),
+            Token::new(TokenType::Identifier, "x".to_string()),
+            Token::new(TokenType::Comma, ",".to_string()),
+            Token::new(TokenType::Identifier, "y".to_string()),
+            Token::new(TokenType::RightParen, ")".to_string()),
+            Token::new(TokenType::Local, "local".to_string()),
+            Token::new(TokenType::Identifier, "n2".to_string()),
+            Token::new(TokenType::Equal, "=".to_string()),
+            Token::new(TokenType::Identifier, "x".to_string()),
+            Token::new(TokenType::Caret, "^".to_string()),
+            Token::new(TokenType::Int, "2".to_string()),
+            Token::new(TokenType::Plus, "+".to_string()),
+            Token::new(TokenType::Identifier, "y".to_string()),
+            Token::new(TokenType::Caret, "^".to_string()),
+            Token::new(TokenType::Int, "2".to_string()),
+            Token::new(TokenType::Return, "return".to_string()),
+            Token::new(TokenType::Identifier, "math".to_string()),
+            Token::new(TokenType::Dot, ".".to_string()),
+            Token::new(TokenType::Identifier, "sqrt".to_string()),
+            Token::new(TokenType::LeftParen, "(".to_string()),
+            Token::new(TokenType::Identifier, "n2".to_string()),
+            Token::new(TokenType::RightParen, ")".to_string()),
+            Token::new(TokenType::End, "end".to_string()),
+
+            // function twice
+            Token::new(TokenType::Function, "function".to_string()),
+            Token::new(TokenType::Identifier, "twice".to_string()),
+            Token::new(TokenType::LeftParen, "(".to_string()),
+            Token::new(TokenType::Identifier, "x".to_string()),
+            Token::new(TokenType::RightParen, ")".to_string()),
+            Token::new(TokenType::Return, "return".to_string()),
+            Token::new(TokenType::Int, "2".to_string()),
+            Token::new(TokenType::Star, "*".to_string()),
+            Token::new(TokenType::Identifier, "x".to_string()),
             Token::new(TokenType::End, "end".to_string()),
         ];
         let mut lexer = Lexer::new(input.to_string());
