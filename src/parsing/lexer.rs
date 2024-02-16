@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
     Illegal,
     Eof,
@@ -96,7 +96,7 @@ impl TokenType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub literal: String,
@@ -115,6 +115,24 @@ impl Token {
             line: 0,
             column: 0,
         };
+    }
+
+    pub fn empty() -> Self {
+        return Self {
+            token_type: TokenType::Illegal,
+            literal: "".to_string(),
+            file_path: "".to_string(),
+            line: 0,
+            column: 0,
+        };
+    }
+
+    pub fn is(&self, token_type: TokenType) -> bool {
+        return self.token_type == token_type;
+    }
+
+    pub fn is_not(&self, token_type: TokenType) -> bool {
+        return self.token_type != token_type;
     }
 }
 
