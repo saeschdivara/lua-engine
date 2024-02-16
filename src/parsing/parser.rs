@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, Expression, IntExpression, Program, Statement};
+use crate::parsing::ast::{AssignmentStatement, Expression, IntExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 pub struct Parser {
@@ -63,6 +63,9 @@ impl Parser {
             TokenType::Local => {
                 self.parse_local_assignment()
             },
+            TokenType::Return => {
+                self.parse_return()
+            },
             _ => Err(ParsingError::new(format!("Unknown token_type found: {:?}", self.current_token.token_type)))
         }
     }
@@ -83,6 +86,13 @@ impl Parser {
 
         match self.parse_expression() {
             Ok(expr) => Ok(Box::new(AssignmentStatement::new(variable_token, expr))),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn parse_return(&mut self) -> StatementParsingResult {
+        match self.parse_expression() {
+            Ok(expr) => Ok(Box::new(ReturnStatement::new(expr))),
             Err(err) => Err(err),
         }
     }
@@ -114,7 +124,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parsing::ast::AssignmentStatement;
+    use crate::parsing::ast::{AssignmentStatement, IntExpression, ReturnStatement};
     use crate::parsing::lexer::TokenType;
     use crate::parsing::parser::Parser;
 
@@ -138,10 +148,31 @@ mod tests {
 
             assert!(stmt.as_any().is::<AssignmentStatement>());
 
-            if let Some(assignment) = stmt.as_any().downcast_ref::<AssignmentStatement>() {
-                assert_eq!(assignment.variable.token_type, TokenType::Identifier);
-                assert_eq!(&assignment.variable.literal, expected_ident);
-            }
+            let assignment = stmt.as_any().downcast_ref::<AssignmentStatement>().unwrap();
+            assert_eq!(assignment.variable.token_type, TokenType::Identifier);
+            assert_eq!(&assignment.variable.literal, expected_ident);
         }
+    }
+
+    #[test]
+    fn parse_simple_return_statement() {
+        let input = r#"
+            return 1
+        "#;
+
+        let mut parser = Parser::new(input.to_string());
+        let output_program = parser.parse_program();
+        let statements = output_program.statements;
+
+        assert_eq!(statements.len(), 1);
+        let stmt = statements.first().unwrap();
+
+        assert!(stmt.as_any().is::<ReturnStatement>());
+        let ret = stmt.as_any().downcast_ref::<ReturnStatement>().unwrap();
+
+        assert!(ret.value.as_any().is::<IntExpression>());
+        let int = ret.value.as_any().downcast_ref::<IntExpression>().unwrap();
+
+        assert_eq!(int.value, 1);
     }
 }

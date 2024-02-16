@@ -30,16 +30,35 @@ pub struct AssignmentStatement {
     pub value: Box<dyn Expression>,
 }
 
+impl AssignmentStatement {
+    pub fn new(variable: Token, value: Box<dyn Expression>) -> Self {
+        return Self {
+            variable,
+            value,
+        };
+    }
+}
+
 impl Debug for AssignmentStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "variable: {:?}, value: {}", self.variable, self.value.to_string())
     }
 }
 
-impl AssignmentStatement {
-    pub fn new(variable: Token, value: Box<dyn Expression>) -> Self {
+#[derive(SmartStatement)]
+pub struct ReturnStatement {
+    pub value: Box<dyn Expression>,
+}
+
+impl Debug for ReturnStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "value: {}", self.value.to_string())
+    }
+}
+
+impl ReturnStatement {
+    pub fn new(value: Box<dyn Expression>) -> Self {
         return Self {
-            variable,
             value,
         };
     }
