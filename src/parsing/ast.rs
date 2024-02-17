@@ -106,6 +106,31 @@ impl Debug for InfixExpression {
     }
 }
 
+#[derive(SmartExpression)]
+pub struct FunctionExpression {
+    pub parameters: Vec<String>,
+    pub block: Vec<Box<dyn Statement>>,
+}
+
+impl FunctionExpression {
+    pub fn new(parameters: Vec<String>, block: Vec<Box<dyn Statement>>) -> Self {
+        return Self {
+            parameters,
+            block,
+        }
+    }
+}
+
+impl Debug for FunctionExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,
+               "params: {:?}, block: {:?}",
+               self.parameters,
+               self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
+        )
+    }
+}
+
 pub trait Statement {
     fn as_any(&self) -> &dyn Any;
     fn to_string(&self) -> String;
@@ -173,6 +198,32 @@ impl IfStatement {
         return Self {
             condition,
             block,
+        };
+    }
+}
+
+#[derive(SmartStatement)]
+pub struct FunctionStatement {
+    pub name: String,
+    pub function: FunctionExpression,
+}
+
+impl Debug for FunctionStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+           "name: {} | function: {:?}",
+           self.name,
+           self.function
+        )
+    }
+}
+
+impl FunctionStatement {
+    pub fn new(name: String, function: FunctionExpression) -> Self {
+        return Self {
+            name,
+            function,
         };
     }
 }

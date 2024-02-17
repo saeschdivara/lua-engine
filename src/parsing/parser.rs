@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, Expression, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, Expression, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -93,9 +93,10 @@ impl Parser {
 
     fn parse_statement(&mut self) -> StatementParsingResult {
         match self.current_token.token_type {
-            TokenType::Local    => self.parse_local_assignment(),
-            TokenType::Return   => self.parse_return(),
-            TokenType::If       => self.parse_if(),
+            TokenType::Local        => self.parse_local_assignment(),
+            TokenType::Return       => self.parse_return(),
+            TokenType::If           => self.parse_if(),
+            TokenType::Function     => self.parse_function(),
 
             _ => Err(ParsingError::new(format!("Unknown token_type found: {:?}", self.current_token.token_type)))
         }
@@ -141,6 +142,51 @@ impl Parser {
         
         match body_result {
             Ok(body) => Ok(Box::new(IfStatement::new(condition, body.statements))),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn parse_function(&mut self) -> StatementParsingResult {
+        if self.next_token.is_not(TokenType::Identifier) {
+            return Err(ParsingError::new(format!("Next token is not an identifier: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        let function_name = self.current_token.literal.clone();
+
+        if self.next_token.is_not(TokenType::LeftParen) {
+            return Err(ParsingError::new(format!("Next token is not (: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+        let mut parameters = vec![];
+
+        while self.next_token.is_not(TokenType::RightParen) {
+            self.read_token();
+
+            if self.current_token.is_not(TokenType::Identifier) {
+                return Err(ParsingError::new(format!("Expected identifier but was {:?}", self.current_token.token_type)))
+            }
+
+            parameters.push(self.current_token.literal.clone());
+
+            if self.current_token.is(TokenType::Comma) {
+                self.read_token();
+            }
+        }
+
+        self.read_token();
+
+        let body_result = self.parse_program(vec![
+            TokenType::End,
+        ]);
+
+        match body_result {
+            Ok(body) => {
+                let function = FunctionExpression::new(parameters, body.statements);
+                Ok(Box::new(FunctionStatement::new(function_name, function)))
+            },
             Err(err) => Err(err),
         }
     }
@@ -245,7 +291,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parsing::ast::{AssignmentStatement, Expression, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PrefixExpression, ReturnStatement, Statement};
+    use crate::parsing::ast::{AssignmentStatement, Expression, FunctionStatement, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PrefixExpression, ReturnStatement, Statement};
     use crate::parsing::lexer::TokenType;
     use crate::parsing::parser::Parser;
 
@@ -298,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_simple_if_statements() {
+    fn parse_simple_if_statement() {
         let input = r#"
             if n == 0 then
                 return 1
@@ -330,6 +376,32 @@ mod tests {
         );
 
         assert_eq!(if_stmt.block.first().unwrap().to_string(), expected_block.to_string());
+    }
+
+    #[test]
+    fn parse_simple_function_statement() {
+        let input = r#"
+            function fact(n)
+                return 1
+            end
+        "#;
+
+        let mut parser = Parser::new(input.to_string());
+        let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
+        let statements = output_program.statements;
+
+        assert_eq!(statements.len(), 1);
+
+        let stmt = statements.first().unwrap();
+        assert!(stmt.as_any().is::<FunctionStatement>());
+
+        let func_stmt = stmt.as_any().downcast_ref::<FunctionStatement>().unwrap();
+
+        assert_eq!(func_stmt.name, String::from("fact"));
+        assert_eq!(func_stmt.function.parameters.len(), 1);
+        assert_eq!(*func_stmt.function.parameters.first().unwrap(), String::from("n"));
+
+        assert_eq!(func_stmt.function.block.len(), 1);
     }
 
     #[test]
