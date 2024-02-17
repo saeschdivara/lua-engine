@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, Expression, IdentifierExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, Expression, get_operator_precedence, IdentifierExpression, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type StatementParsingResult = Result<Box<dyn Statement>, ParsingError>;
@@ -35,10 +35,34 @@ impl Parser {
             current_token: Token::empty(),
             next_token: Token::empty(),
             prefix_tokens: vec![
+                TokenType::Int,
+                TokenType::Identifier,
                 TokenType::Minus,
                 TokenType::Tilde,
             ],
-            infix_tokens: vec![],
+            infix_tokens: vec![
+                TokenType::Or,
+                TokenType::And,
+                TokenType::Lower,
+                TokenType::Greater,
+                TokenType::LowerEqual,
+                TokenType::GreaterEqual,
+                TokenType::DoubleEquals,
+                TokenType::TildeEqual,
+                TokenType::Bar,
+                TokenType::Tilde,
+                TokenType::Ampersand,
+                TokenType::ShiftLeft,
+                TokenType::ShiftRight,
+                TokenType::DoubleDot,
+                TokenType::Plus,
+                TokenType::Minus,
+                TokenType::Star,
+                TokenType::Slash,
+                TokenType::DoubleSlash,
+                TokenType::Percent,
+                TokenType::Caret,
+            ],
         };
 
         p.read_token();
@@ -108,6 +132,25 @@ impl Parser {
     }
 
     pub fn parse_expression(&mut self, precedence: i8) -> ExpressionParsingResult {
+        let token_type = self.next_token.token_type.clone();
+        if !self.prefix_tokens.contains(&token_type) {
+            return Err(ParsingError::new(format!("{:?} is not a prefix token", token_type)));
+        }
+
+        let mut left = self.parse_prefix_expression();
+        if left.is_err() { return left; }
+
+        while !self.next_token_is_stop() && precedence < self.peek_precedence() {
+            if !self.infix_tokens.contains(&self.next_token.token_type.clone()) { break }
+
+            self.read_token();
+            left = self.parse_infix_expression(left.unwrap());
+        }
+
+        return left;
+    }
+
+    fn parse_prefix_expression(&mut self) -> ExpressionParsingResult {
         match self.next_token.token_type {
             TokenType::Int => {
                 self.read_token();
@@ -125,30 +168,49 @@ impl Parser {
                 let tok = self.current_token.clone();
                 Ok(Box::new(IdentifierExpression::new(tok.literal)))
             },
+
             _ => {
+                self.read_token();
 
-                let token_type = self.next_token.token_type.clone();
-                if self.prefix_tokens.contains(&token_type) {
-                    return self.parse_prefix_expression();
+                let operator = self.current_token.token_type.clone();
+                match self.parse_expression(PREFIX_PRECEDENCE) {
+                    Ok(expr) => { Ok(Box::new(PrefixExpression::new(operator, expr))) }
+                    Err(err) => { Err(err) }
                 }
-
-                Err(ParsingError::new("unknown error".to_string()))
             }
         }
     }
 
-    fn parse_prefix_expression(&mut self) -> ExpressionParsingResult {
-        self.read_token();
-
+    fn parse_infix_expression(&mut self, left: Box<dyn Expression>) -> ExpressionParsingResult {
         let operator = self.current_token.token_type.clone();
-        match self.parse_expression(PREFIX_PRECEDENCE) {
-            Ok(expr) => { Ok(Box::new(PrefixExpression::new(operator, expr))) }
+        let current_precedence = self.current_precedence();
+
+        match self.parse_expression(current_precedence) {
+            Ok(expr) => { Ok(Box::new(InfixExpression::new(left, operator, expr))) }
             Err(err) => { Err(err) }
         }
     }
 
-    fn parse_infix_expression(&mut self) -> ExpressionParsingResult {
-        return Err(ParsingError::new("unknown error".to_string()));
+    fn peek_precedence(&self) -> i8 {
+        return get_operator_precedence(self.next_token.token_type.clone());
+    }
+
+    fn current_precedence(&self) -> i8 {
+        return get_operator_precedence(self.current_token.token_type.clone());
+    }
+
+    fn next_token_is_stop(&self) -> bool {
+        return vec![
+            TokenType::SemiColon,
+            TokenType::Local,
+            TokenType::Return,
+            TokenType::For,
+            TokenType::If,
+            TokenType::ElseIf,
+            TokenType::Else,
+            TokenType::End,
+            TokenType::Eof,
+        ].contains(&self.next_token.token_type);
     }
 
     fn read_token(&mut self) {
@@ -238,7 +300,7 @@ mod tests {
                 "1 == 2",
                 InfixExpression::new(
                     Box::new(IntExpression::new(1)),
-                    TokenType::Minus,
+                    TokenType::DoubleEquals,
                     Box::new(IntExpression::new(2))
                 )
             ),
@@ -247,7 +309,7 @@ mod tests {
         for (i, expected_expr) in input {
             let mut parser = Parser::new(i.to_string());
             let result = parser.parse_expression(INITIAL_PRECEDENCE);
-            assert!(result.is_ok());
+            assert_eq!(result.is_ok(), true, "{}", result.err().unwrap().message);
 
             let expr = result.unwrap();
             assert!(expr.as_any().is::<InfixExpression>());
