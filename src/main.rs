@@ -1,4 +1,5 @@
 use clap::Parser;
+use my_gamma_script::parsing::lexer::TokenType;
 use my_gamma_script::parsing::parser::Parser as MyParser;
 
 #[derive(Parser, Debug)]
@@ -15,9 +16,15 @@ fn main() {
         .expect("Should have been able to read the file");
     
     let mut p = MyParser::new(contents);
-    let program = p.parse_program();
 
-    program.statements
-        .iter()
-        .for_each(|stmt| { println!("{}", stmt.to_string()); });
+    match p.parse_program(vec![TokenType::Eof]) {
+        Ok(program) => {
+            program.statements
+                .iter()
+                .for_each(|stmt| { println!("{}", stmt.to_string()); });
+        }
+        Err(err) => {
+            eprintln!("Failed to parse program: {}", err.message);
+        }
+    }
 }
