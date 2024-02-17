@@ -1,4 +1,4 @@
-#[derive(Debug, Eq, Hash, PartialEq, Clone)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum TokenType {
     Illegal,
     Eof,
@@ -133,6 +133,10 @@ impl Token {
 
     pub fn is_not(&self, token_type: TokenType) -> bool {
         return self.token_type != token_type;
+    }
+
+    pub fn is_not_one(&self, token_types: Vec<TokenType>) -> bool {
+        return !token_types.contains(&self.token_type);
     }
 }
 

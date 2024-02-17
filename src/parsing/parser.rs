@@ -1,6 +1,7 @@
-use crate::parsing::ast::{AssignmentStatement, Expression, get_operator_precedence, IdentifierExpression, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, Expression, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
+type ProgramParsingResult = Result<Program, ParsingError>;
 type StatementParsingResult = Result<Box<dyn Statement>, ParsingError>;
 type ExpressionParsingResult = Result<Box<dyn Expression>, ParsingError>;
 
@@ -11,8 +12,6 @@ pub struct Parser {
 
     prefix_tokens: Vec<TokenType>,
     infix_tokens: Vec<TokenType>,
-    // infix_parser: HashMap<TokenType, Box<dyn Fn(&mut Parser) -> ExpressionParsingResult + 'static>>,
-    // prefix_parser: HashMap<TokenType, Box<dyn Fn(&mut Parser) -> ExpressionParsingResult + 'static>>,
 }
 
 #[derive(Debug)]
@@ -70,36 +69,34 @@ impl Parser {
         return p;
     }
 
-    pub fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self, end_token: Vec<TokenType>) -> ProgramParsingResult {
         let mut statements = vec![];
 
         self.read_token();
 
-        while self.current_token.is_not(TokenType::Eof) {
+        while self.current_token.is_not_one(end_token.clone()) {
             match self.parse_statement() {
                 Ok(stmt) => {
                     statements.push(stmt);
                 }
                 Err(err) => {
-                    eprintln!("Parsing failed of statement: {:?}", err);
+                    return Err(err);
                 }
             }
             self.read_token();
         }
 
-        return Program {
+        return Ok(Program {
             statements,
-        }
+        });
     }
 
     fn parse_statement(&mut self) -> StatementParsingResult {
         match self.current_token.token_type {
-            TokenType::Local => {
-                self.parse_local_assignment()
-            },
-            TokenType::Return => {
-                self.parse_return()
-            },
+            TokenType::Local    => self.parse_local_assignment(),
+            TokenType::Return   => self.parse_return(),
+            TokenType::If       => self.parse_if(),
+
             _ => Err(ParsingError::new(format!("Unknown token_type found: {:?}", self.current_token.token_type)))
         }
     }
@@ -120,6 +117,30 @@ impl Parser {
 
         match self.parse_expression(INITIAL_PRECEDENCE) {
             Ok(expr) => Ok(Box::new(AssignmentStatement::new(variable_token, expr))),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn parse_if(&mut self) -> StatementParsingResult {
+        let condition = match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => expr,
+            Err(err) => return Err(err)
+        };
+
+        if self.next_token.is_not(TokenType::Then) {
+            return Err(ParsingError::new(format!("Next token is not then: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+        
+        let body_result = self.parse_program(vec![
+            TokenType::ElseIf,
+            TokenType::Else,
+            TokenType::End,
+        ]);
+        
+        match body_result {
+            Ok(body) => Ok(Box::new(IfStatement::new(condition, body.statements))),
             Err(err) => Err(err),
         }
     }
@@ -208,6 +229,7 @@ impl Parser {
             TokenType::If,
             TokenType::ElseIf,
             TokenType::Else,
+            TokenType::Then,
             TokenType::End,
             TokenType::Eof,
         ].contains(&self.next_token.token_type);
@@ -223,7 +245,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parsing::ast::{AssignmentStatement, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PrefixExpression, ReturnStatement};
+    use crate::parsing::ast::{AssignmentStatement, Expression, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PrefixExpression, ReturnStatement, Statement};
     use crate::parsing::lexer::TokenType;
     use crate::parsing::parser::Parser;
 
@@ -236,7 +258,7 @@ mod tests {
 
         let expected_identifiers = vec!["n", "x"];
         let mut parser = Parser::new(input.to_string());
-        let output_program = parser.parse_program();
+        let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
         let statements = output_program.statements;
 
         assert_eq!(statements.len(), 2);
@@ -260,7 +282,7 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input.to_string());
-        let output_program = parser.parse_program();
+        let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
         let statements = output_program.statements;
 
         assert_eq!(statements.len(), 1);
@@ -284,13 +306,30 @@ mod tests {
         "#;
 
         let mut parser = Parser::new(input.to_string());
-        let output_program = parser.parse_program();
+        let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
         let statements = output_program.statements;
 
         assert_eq!(statements.len(), 1);
 
         let stmt = statements.first().unwrap();
         assert!(stmt.as_any().is::<IfStatement>());
+
+        let if_stmt = stmt.as_any().downcast_ref::<IfStatement>().unwrap();
+
+        let expected_cond = InfixExpression::new(
+            Box::new(IdentifierExpression::new("n".to_string())),
+            TokenType::DoubleEquals,
+            Box::new(IntExpression::new(0))
+        );
+
+        assert_eq!(if_stmt.condition.to_string(), expected_cond.to_string());
+        assert_eq!(if_stmt.block.len(), 1);
+
+        let expected_block = ReturnStatement::new(
+            Box::new(IntExpression::new(1))
+        );
+
+        assert_eq!(if_stmt.block.first().unwrap().to_string(), expected_block.to_string());
     }
 
     #[test]
