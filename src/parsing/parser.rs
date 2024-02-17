@@ -1,10 +1,18 @@
-use crate::parsing::ast::{AssignmentStatement, Expression, IntExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, Expression, IdentifierExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
+
+type StatementParsingResult = Result<Box<dyn Statement>, ParsingError>;
+type ExpressionParsingResult = Result<Box<dyn Expression>, ParsingError>;
 
 pub struct Parser {
     lexer: Lexer,
     current_token: Token,
     next_token: Token,
+
+    prefix_tokens: Vec<TokenType>,
+    infix_tokens: Vec<TokenType>,
+    // infix_parser: HashMap<TokenType, Box<dyn Fn(&mut Parser) -> ExpressionParsingResult + 'static>>,
+    // prefix_parser: HashMap<TokenType, Box<dyn Fn(&mut Parser) -> ExpressionParsingResult + 'static>>,
 }
 
 #[derive(Debug)]
@@ -20,15 +28,17 @@ impl ParsingError {
     }
 }
 
-type StatementParsingResult = Result<Box<dyn Statement>, ParsingError>;
-type ExpressionParsingResult = Result<Box<dyn Expression>, ParsingError>;
-
 impl Parser {
     pub fn new(input: String) -> Self {
         let mut p = Self {
             lexer: Lexer::new(input),
             current_token: Token::empty(),
             next_token: Token::empty(),
+            prefix_tokens: vec![
+                TokenType::Minus,
+                TokenType::Tilde,
+            ],
+            infix_tokens: vec![],
         };
 
         p.read_token();
@@ -84,20 +94,20 @@ impl Parser {
 
         self.read_token();
 
-        match self.parse_expression() {
+        match self.parse_expression(INITIAL_PRECEDENCE) {
             Ok(expr) => Ok(Box::new(AssignmentStatement::new(variable_token, expr))),
             Err(err) => Err(err),
         }
     }
 
     fn parse_return(&mut self) -> StatementParsingResult {
-        match self.parse_expression() {
+        match self.parse_expression(INITIAL_PRECEDENCE) {
             Ok(expr) => Ok(Box::new(ReturnStatement::new(expr))),
             Err(err) => Err(err),
         }
     }
 
-    fn parse_expression(&mut self) -> ExpressionParsingResult {
+    pub fn parse_expression(&mut self, precedence: i8) -> ExpressionParsingResult {
         match self.next_token.token_type {
             TokenType::Int => {
                 self.read_token();
@@ -110,8 +120,35 @@ impl Parser {
                     Err(ParsingError::new("Failed to parse int".to_string()))
                 }
             },
-            _ => Err(ParsingError::new("unknown error".to_string()))
+            TokenType::Identifier => {
+                self.read_token();
+                let tok = self.current_token.clone();
+                Ok(Box::new(IdentifierExpression::new(tok.literal)))
+            },
+            _ => {
+
+                let token_type = self.next_token.token_type.clone();
+                if self.prefix_tokens.contains(&token_type) {
+                    return self.parse_prefix_expression();
+                }
+
+                Err(ParsingError::new("unknown error".to_string()))
+            }
         }
+    }
+
+    fn parse_prefix_expression(&mut self) -> ExpressionParsingResult {
+        self.read_token();
+
+        let operator = self.current_token.token_type.clone();
+        match self.parse_expression(PREFIX_PRECEDENCE) {
+            Ok(expr) => { Ok(Box::new(PrefixExpression::new(operator, expr))) }
+            Err(err) => { Err(err) }
+        }
+    }
+
+    fn parse_infix_expression(&mut self) -> ExpressionParsingResult {
+        return Err(ParsingError::new("unknown error".to_string()));
     }
 
     fn read_token(&mut self) {
@@ -124,7 +161,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parsing::ast::{AssignmentStatement, IntExpression, ReturnStatement};
+    use crate::parsing::ast::{AssignmentStatement, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PrefixExpression, ReturnStatement};
     use crate::parsing::lexer::TokenType;
     use crate::parsing::parser::Parser;
 
@@ -174,5 +211,72 @@ mod tests {
         let int = ret.value.as_any().downcast_ref::<IntExpression>().unwrap();
 
         assert_eq!(int.value, 1);
+    }
+
+    #[test]
+    fn parse_simple_if_statements() {
+        let input = r#"
+            if n == 0 then
+                return 1
+            end
+        "#;
+
+        let mut parser = Parser::new(input.to_string());
+        let output_program = parser.parse_program();
+        let statements = output_program.statements;
+
+        assert_eq!(statements.len(), 1);
+
+        let stmt = statements.first().unwrap();
+        assert!(stmt.as_any().is::<IfStatement>());
+    }
+
+    #[test]
+    fn parse_simple_infix_expressions() {
+        let input = vec![
+            (
+                "1 == 2",
+                InfixExpression::new(
+                    Box::new(IntExpression::new(1)),
+                    TokenType::Minus,
+                    Box::new(IntExpression::new(2))
+                )
+            ),
+        ];
+
+        for (i, expected_expr) in input {
+            let mut parser = Parser::new(i.to_string());
+            let result = parser.parse_expression(INITIAL_PRECEDENCE);
+            assert!(result.is_ok());
+
+            let expr = result.unwrap();
+            assert!(expr.as_any().is::<InfixExpression>());
+
+            let infix = expr.as_any().downcast_ref::<InfixExpression>().unwrap();
+            assert_eq!(infix.left_value.to_string(), expected_expr.left_value.to_string());
+            assert_eq!(infix.operator, expected_expr.operator);
+            assert_eq!(infix.right_value.to_string(), expected_expr.right_value.to_string());
+        }
+    }
+
+    #[test]
+    fn parse_simple_prefix_expressions() {
+        let input = vec![
+            ("-5", PrefixExpression::new(TokenType::Minus, Box::new(IntExpression::new(5)))),
+            ("~foobar", PrefixExpression::new(TokenType::Tilde, Box::new(IdentifierExpression::new("foobar".to_string())))),
+        ];
+
+        for (i, expected_expr) in input {
+            let mut parser = Parser::new(i.to_string());
+            let result = parser.parse_expression(INITIAL_PRECEDENCE);
+            assert!(result.is_ok());
+
+            let expr = result.unwrap();
+            assert!(expr.as_any().is::<PrefixExpression>());
+
+            let prefix = expr.as_any().downcast_ref::<PrefixExpression>().unwrap();
+            assert_eq!(prefix.operator, expected_expr.operator);
+            assert_eq!(prefix.value.to_string(), expected_expr.value.to_string());
+        }
     }
 }
