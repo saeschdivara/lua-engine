@@ -248,7 +248,7 @@ impl Lexer {
         while let Some(ch) = self.ch && ch.is_whitespace() {
             if ch == '\n' {
                 self.line += 1;
-                self.column = 0;
+                self.column = 1;
             }
             else {
                 self.column += 1;

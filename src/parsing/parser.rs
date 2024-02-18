@@ -356,6 +356,8 @@ impl Parser {
             }
         }
 
+        self.read_token();
+
         Ok(Box::new(CallExpression::new(left, arguments)))
     }
 
@@ -452,6 +454,24 @@ mod tests {
         let int = ret.value.as_any().downcast_ref::<IntExpression>().unwrap();
 
         assert_eq!(int.value, 1);
+    }
+
+    #[test]
+    fn parse_complex_return_statement() {
+        let input = r#"
+            return n * fact(n - 1)
+        "#;
+
+        let mut parser = Parser::new(input.to_string());
+        let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
+        let statements = output_program.statements;
+
+        assert_eq!(statements.len(), 1);
+        let stmt = statements.first().unwrap();
+
+        assert!(stmt.as_any().is::<ReturnStatement>());
+        let ret = stmt.as_any().downcast_ref::<ReturnStatement>().unwrap();
+
     }
 
     #[test]
@@ -636,6 +656,7 @@ mod tests {
     #[test]
     fn parse_call_expressions() {
         let input = vec![
+            ("add(n - 1)", "add([\"(n Minus 1)\"])"),
             ("add(1, 2 * 3, 4 + 5)", "add([\"1\", \"(2 Star 3)\", \"(4 Plus 5)\"])"),
         ];
 
