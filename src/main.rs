@@ -1,6 +1,6 @@
 use clap::Parser;
-use my_gamma_script::parsing::lexer::TokenType;
-use my_gamma_script::parsing::parser::Parser as MyParser;
+
+use my_gamma_script::evaluation::interpreter::Interpreter;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -12,22 +12,6 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let contents = std::fs::read_to_string(args.path)
-        .expect("Should have been able to read the file");
-    
-    let mut p = MyParser::new(contents);
-
-    match p.parse_program(vec![TokenType::Eof]) {
-        Ok(program) => {
-            program.statements
-                .iter()
-                .for_each(|stmt| { println!("{}", stmt.to_string()); });
-        }
-        Err(err) => {
-            eprintln!(
-                "Failed to parse program: {} [{}:{}] {}",
-                err.file_path, err.line, err.column, err.message
-            );
-        }
-    }
+    let mut interpreter = Interpreter::new();
+    interpreter.evaluate_file(args.path);
 }

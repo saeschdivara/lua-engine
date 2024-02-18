@@ -1,6 +1,7 @@
 use gamma_macros::{SmartExpression, SmartStatement};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
+use std::rc::Rc;
 use crate::parsing::lexer::{Token, TokenType};
 
 pub const INITIAL_PRECEDENCE: i8 = -1;
@@ -280,7 +281,7 @@ impl ElseIfStatement {
 #[derive(SmartStatement)]
 pub struct FunctionStatement {
     pub name: String,
-    pub function: FunctionExpression,
+    pub function: Rc<FunctionExpression>,
 }
 
 impl Debug for FunctionStatement {
@@ -298,7 +299,7 @@ impl FunctionStatement {
     pub fn new(name: String, function: FunctionExpression) -> Self {
         return Self {
             name,
-            function,
+            function: Rc::new(function),
         };
     }
 }
