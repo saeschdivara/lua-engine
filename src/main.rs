@@ -24,7 +24,10 @@ fn main() {
                 .for_each(|stmt| { println!("{}", stmt.to_string()); });
         }
         Err(err) => {
-            eprintln!("Failed to parse program: {}", err.message);
+            eprintln!(
+                "Failed to parse program: {} [{}:{}] {}",
+                err.file_path, err.line, err.column, err.message
+            );
         }
     }
 }

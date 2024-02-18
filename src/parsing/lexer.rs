@@ -102,8 +102,8 @@ pub struct Token {
     pub literal: String,
 
     pub file_path: String,
-    pub line: u64,
-    pub column: u64,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl Token {
@@ -142,6 +142,12 @@ impl Token {
 
 pub struct Lexer {
     input: Vec<char>,
+
+    // - debug info -
+    pub line: usize,
+    pub column: usize,
+    // - debug info -
+
     position: usize,
     // current position in input (points to current char)
     read_pos: usize,
@@ -153,6 +159,8 @@ impl Lexer {
     pub fn new(input: String) -> Self {
         let mut l = Self {
             input: input.chars().collect(),
+            line: 1,
+            column: 0,
             position: 0,
             read_pos: 0,
             ch: None,
@@ -169,65 +177,65 @@ impl Lexer {
 
         let tok = if let Some(ch) = self.ch {
             match ch {
-                ',' => Token::new(TokenType::Comma, ch.to_string()),
+                ',' => self.create_token(TokenType::Comma, ch.to_string()),
                 '=' => {
                     if let Some(other_character) = self.peek_char() && other_character == '=' {
                         self.read_char();
-                        Token::new(TokenType::DoubleEquals, "==".to_string())
+                        self.create_token(TokenType::DoubleEquals, "==".to_string())
                     }
-                    else { Token::new(TokenType::Equal, ch.to_string()) }
+                    else { self.create_token(TokenType::Equal, ch.to_string()) }
 
                 },
-                '+' => Token::new(TokenType::Plus, ch.to_string()),
+                '+' => self.create_token(TokenType::Plus, ch.to_string()),
                 '<'  => {
                     if let Some(other_character) = self.peek_char() && other_character == '=' {
                         self.read_char();
-                        Token::new(TokenType::LowerEqual, "<=".to_string())
+                        self.create_token(TokenType::LowerEqual, "<=".to_string())
                     }
-                    else { Token::new(TokenType::Lower, ch.to_string()) }
+                    else { self.create_token(TokenType::Lower, ch.to_string()) }
 
                 },
                 '>'  => {
                     if let Some(other_character) = self.peek_char() && other_character == '=' {
                         self.read_char();
-                        Token::new(TokenType::GreaterEqual, ">=".to_string())
+                        self.create_token(TokenType::GreaterEqual, ">=".to_string())
                     }
-                    else { Token::new(TokenType::Greater, ch.to_string()) }
+                    else { self.create_token(TokenType::Greater, ch.to_string()) }
 
                 },
-                '-' => Token::new(TokenType::Minus, ch.to_string()),
-                '*' => Token::new(TokenType::Star, ch.to_string()),
-                '(' => Token::new(TokenType::LeftParen, ch.to_string()),
-                ')' => Token::new(TokenType::RightParen, ch.to_string()),
-                '{' => Token::new(TokenType::LeftBrace, ch.to_string()),
-                '}' => Token::new(TokenType::RightBrace, ch.to_string()),
-                ';' => Token::new(TokenType::SemiColon, ch.to_string()),
-                ':' => Token::new(TokenType::Colon, ch.to_string()),
-                '.' => Token::new(TokenType::Dot, ch.to_string()),
-                '/' => Token::new(TokenType::Slash, ch.to_string()),
-                '#' => Token::new(TokenType::Hash, ch.to_string()),
-                '&' => Token::new(TokenType::Ampersand, ch.to_string()),
-                '~' => Token::new(TokenType::Tilde, ch.to_string()),
-                '%' => Token::new(TokenType::Percent, ch.to_string()),
-                '|' => Token::new(TokenType::Bar, ch.to_string()),
-                '^' => Token::new(TokenType::Caret, ch.to_string()),
+                '-' => self.create_token(TokenType::Minus, ch.to_string()),
+                '*' => self.create_token(TokenType::Star, ch.to_string()),
+                '(' => self.create_token(TokenType::LeftParen, ch.to_string()),
+                ')' => self.create_token(TokenType::RightParen, ch.to_string()),
+                '{' => self.create_token(TokenType::LeftBrace, ch.to_string()),
+                '}' => self.create_token(TokenType::RightBrace, ch.to_string()),
+                ';' => self.create_token(TokenType::SemiColon, ch.to_string()),
+                ':' => self.create_token(TokenType::Colon, ch.to_string()),
+                '.' => self.create_token(TokenType::Dot, ch.to_string()),
+                '/' => self.create_token(TokenType::Slash, ch.to_string()),
+                '#' => self.create_token(TokenType::Hash, ch.to_string()),
+                '&' => self.create_token(TokenType::Ampersand, ch.to_string()),
+                '~' => self.create_token(TokenType::Tilde, ch.to_string()),
+                '%' => self.create_token(TokenType::Percent, ch.to_string()),
+                '|' => self.create_token(TokenType::Bar, ch.to_string()),
+                '^' => self.create_token(TokenType::Caret, ch.to_string()),
                 _ => {
                     if self.is_character(ch, false) {
                         let identifier = self.read_identifier();
-                        Token::new(TokenType::from_string(identifier.clone()), identifier)
+                        self.create_token(TokenType::from_string(identifier.clone()), identifier)
                     }
                     else if self.is_digit(ch, false) {
                         let number = self.read_number();
                         // TODO: support floats
-                        Token::new(TokenType::Int, number)
+                        self.create_token(TokenType::Int, number)
                     }
                     else {
-                        Token::new(TokenType::Illegal, "".to_string())
+                        self.create_token(TokenType::Illegal, "".to_string())
                     }
                 },
             }
         } else {
-            Token::new(TokenType::Eof, "".to_string())
+            self.create_token(TokenType::Eof, "".to_string())
         };
 
         self.read_char();
@@ -238,6 +246,14 @@ impl Lexer {
     fn skip_whitespace(&mut self) {
 
         while let Some(ch) = self.ch && ch.is_whitespace() {
+            if ch == '\n' {
+                self.line += 1;
+                self.column = 0;
+            }
+            else {
+                self.column += 1;
+            }
+
             self.read_char();
         }
     }
@@ -292,6 +308,7 @@ impl Lexer {
             self.ch = self.input.get(self.read_pos).map_or(None, |c| Some(c.clone()));
         }
 
+        self.column += 1;
         self.position = self.read_pos;
         self.read_pos += 1;
     }
@@ -310,6 +327,16 @@ impl Lexer {
 
     fn is_digit(&self, c: char, is_hex: bool) -> bool {
         return c.is_numeric() || (is_hex && c.is_ascii_hexdigit());
+    }
+
+    fn create_token(&self, token_type: TokenType, literal: String) -> Token {
+        return Token {
+            token_type,
+            literal,
+            file_path: "".to_string(),
+            line: self.line,
+            column: self.column,
+        }
     }
 }
 

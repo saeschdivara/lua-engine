@@ -16,15 +16,11 @@ pub struct Parser {
 
 #[derive(Debug, Clone)]
 pub struct ParsingError {
-    pub message: String
-}
+    pub message: String,
 
-impl ParsingError {
-    pub fn new(message: String) -> Self {
-        return Self {
-            message,
-        }
-    }
+    pub file_path: String,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl Parser {
@@ -101,20 +97,20 @@ impl Parser {
             TokenType::If           => self.parse_if(),
             TokenType::Function     => self.parse_function(),
 
-            _ => Err(ParsingError::new(format!("Unknown token_type found: {:?}", self.current_token.token_type)))
+            _ => Err(self.create_error(format!("Unknown token_type found: {:?}", self.current_token.token_type)))
         }
     }
 
     fn parse_local_assignment(&mut self) -> StatementParsingResult {
         if self.next_token.is_not(TokenType::Identifier) {
-            return Err(ParsingError::new(format!("Next token is not an identifier: {:?}", self.next_token)))
+            return Err(self.create_error(format!("Next token is not an identifier: {:?}", self.next_token)))
         }
 
         self.read_token();
         let variable_token = self.current_token.clone();
 
         if self.next_token.is_not(TokenType::Equal) {
-            return Err(ParsingError::new(format!("Next token is not equals: {:?}", self.next_token)))
+            return Err(self.create_error(format!("Next token is not equals: {:?}", self.next_token)))
         }
 
         self.read_token();
@@ -132,7 +128,7 @@ impl Parser {
         };
 
         if self.next_token.is_not(TokenType::Then) {
-            return Err(ParsingError::new(format!("Next token is not then: {:?}", self.next_token)))
+            return Err(self.create_error(format!("Next token is not then: {:?}", self.next_token)))
         }
 
         self.read_token();
@@ -191,7 +187,7 @@ impl Parser {
         };
 
         if self.next_token.is_not(TokenType::Then) {
-            return Err(ParsingError::new(format!("Next token is not then: {:?}", self.next_token)))
+            return Err(self.create_error(format!("Next token is not then: {:?}", self.next_token)))
         }
 
         self.read_token();
@@ -210,7 +206,7 @@ impl Parser {
 
     fn parse_function(&mut self) -> StatementParsingResult {
         if self.next_token.is_not(TokenType::Identifier) {
-            return Err(ParsingError::new(format!("Next token is not an identifier: {:?}", self.next_token)))
+            return Err(self.create_error(format!("Next token is not an identifier: {:?}", self.next_token)))
         }
 
         self.read_token();
@@ -218,7 +214,7 @@ impl Parser {
         let function_name = self.current_token.literal.clone();
 
         if self.next_token.is_not(TokenType::LeftParen) {
-            return Err(ParsingError::new(format!("Next token is not (: {:?}", self.next_token)))
+            return Err(self.create_error(format!("Next token is not (: {:?}", self.next_token)))
         }
 
         self.read_token();
@@ -228,7 +224,7 @@ impl Parser {
             self.read_token();
 
             if self.current_token.is_not(TokenType::Identifier) {
-                return Err(ParsingError::new(format!("Expected identifier but was {:?}", self.current_token.token_type)))
+                return Err(self.create_error(format!("Expected identifier but was {:?}", self.current_token.token_type)))
             }
 
             parameters.push(self.current_token.literal.clone());
@@ -263,7 +259,7 @@ impl Parser {
     pub fn parse_expression(&mut self, precedence: i8) -> ExpressionParsingResult {
         let token_type = self.next_token.token_type.clone();
         if !self.prefix_tokens.contains(&token_type) {
-            return Err(ParsingError::new(format!("{:?} is not a prefix token", token_type)));
+            return Err(self.create_error(format!("{:?} is not a prefix token", token_type)));
         }
 
         let mut left = self.parse_prefix_expression();
@@ -290,7 +286,7 @@ impl Parser {
                 if let Ok(number) = value {
                     Ok(Box::new(IntExpression::new(number)))
                 } else {
-                    Err(ParsingError::new("Failed to parse int".to_string()))
+                    Err(self.create_error("Failed to parse int".to_string()))
                 }
             },
             TokenType::Identifier => {
@@ -303,7 +299,7 @@ impl Parser {
                 let expr = self.parse_expression(INITIAL_PRECEDENCE);
                 
                 if self.next_token.is_not(TokenType::RightParen) {
-                    Err(ParsingError::new(format!("Expected ( but was {:?}", self.next_token.token_type.clone())))
+                    Err(self.create_error(format!("Expected ( but was {:?}", self.next_token.token_type.clone())))
                 }
                 else {
                     self.read_token();
@@ -350,7 +346,7 @@ impl Parser {
             }
 
             if self.next_token.is_not_one(vec![TokenType::Comma, TokenType::RightParen]) {
-                return Err(ParsingError::new(
+                return Err(self.create_error(
                     format!("Next token is neither comma nor ), instead is: {:?}", self.next_token.token_type.clone())
                 ))
             }
@@ -391,6 +387,15 @@ impl Parser {
         let t = self.next_token.clone();
         self.current_token = t;
         self.next_token = self.lexer.next_token();
+    }
+    
+    fn create_error(&self, message: String) -> ParsingError {
+        return ParsingError {
+            message,
+            file_path: "".to_string(),
+            line: self.current_token.line,
+            column: self.current_token.column,
+        }
     }
 }
 
