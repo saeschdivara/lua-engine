@@ -71,7 +71,7 @@ impl PrefixExpression {
 impl Debug for PrefixExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,
-               "operator: {:?}, value: {}",
+               "{:?}{}",
                self.operator,
                self.value.to_string()
         )
@@ -98,7 +98,7 @@ impl InfixExpression {
 impl Debug for InfixExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,
-               "left: {}, operator: {:?}, right: {}",
+               "{} {:?} {}",
                self.left_value.to_string(),
                self.operator,
                self.right_value.to_string()
@@ -124,7 +124,7 @@ impl FunctionExpression {
 impl Debug for FunctionExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,
-               "params: {:?}, block: {:?}",
+               "({:?}) {:?} end",
                self.parameters,
                self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
         )
@@ -153,7 +153,7 @@ impl AssignmentStatement {
 
 impl Debug for AssignmentStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "variable: {:?}, value: {}", self.variable, self.value.to_string())
+        write!(f, "local {:?} = {}", self.variable, self.value.to_string())
     }
 }
 
@@ -164,7 +164,7 @@ pub struct ReturnStatement {
 
 impl Debug for ReturnStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "value: {}", self.value.to_string())
+        write!(f, "return {}", self.value.to_string())
     }
 }
 
@@ -186,7 +186,7 @@ impl Debug for IfStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-           "condition: {} | code: {:?}",
+           "if {} then {:?} end",
            self.condition.to_string(),
            self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>()
         )
@@ -212,7 +212,7 @@ impl Debug for FunctionStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-           "name: {} | function: {:?}",
+           "function {} {:?}",
            self.name,
            self.function
         )
