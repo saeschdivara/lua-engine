@@ -38,6 +38,7 @@ impl Parser {
                 TokenType::Identifier,
                 TokenType::Minus,
                 TokenType::Tilde,
+                TokenType::LeftParen,
             ],
             infix_tokens: vec![
                 TokenType::Or,
@@ -235,6 +236,18 @@ impl Parser {
                 self.read_token();
                 let tok = self.current_token.clone();
                 Ok(Box::new(IdentifierExpression::new(tok.literal)))
+            },
+            TokenType::LeftParen => {
+                self.read_token();
+                let expr = self.parse_expression(INITIAL_PRECEDENCE);
+                
+                if self.next_token.is_not(TokenType::RightParen) {
+                    Err(ParsingError::new(format!("Expected ( but was {:?}", self.next_token.token_type.clone())))
+                }
+                else {
+                    self.read_token();
+                    expr
+                }
             },
 
             _ => {
@@ -479,6 +492,24 @@ mod tests {
             assert_eq!(infix.left_value.to_string(), expected_expr.left_value.to_string());
             assert_eq!(infix.operator, expected_expr.operator);
             assert_eq!(infix.right_value.to_string(), expected_expr.right_value.to_string());
+        }
+    }
+
+    #[test]
+    fn parse_grouped_expressions() {
+        let input = vec![
+            ("1 + (2 + 3) + 4", "((1 Plus (2 Plus 3)) Plus 4)"),
+            ("(5 + 5) * 2", "((5 Plus 5) Star 2)"),
+            ("2 / (5 + 5)", "(2 Slash (5 Plus 5))"),
+        ];
+
+        for (i, expected_expr) in input {
+            let mut parser = Parser::new(i.to_string());
+            let result = parser.parse_expression(INITIAL_PRECEDENCE);
+            assert_eq!(result.is_ok(), true, "{}", result.err().unwrap().message);
+
+            let expr = result.unwrap();
+            assert_eq!(expr.to_string(), expected_expr);
         }
     }
 }

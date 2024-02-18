@@ -31,7 +31,7 @@ pub trait Expression {
     fn to_string(&self) -> String;
 }
 
-#[derive(Debug, SmartExpression)]
+#[derive(SmartExpression)]
 pub struct IntExpression {
     pub value: i64,
 }
@@ -39,6 +39,12 @@ pub struct IntExpression {
 impl IntExpression {
     pub fn new(value: i64) -> Self {
         return Self { value }
+    }
+}
+
+impl Debug for IntExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 
@@ -98,7 +104,7 @@ impl InfixExpression {
 impl Debug for InfixExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,
-               "{} {:?} {}",
+               "({} {:?} {})",
                self.left_value.to_string(),
                self.operator,
                self.right_value.to_string()
