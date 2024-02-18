@@ -14,7 +14,7 @@ pub struct Parser {
     infix_tokens: Vec<TokenType>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParsingError {
     pub message: String
 }
@@ -212,6 +212,7 @@ impl Parser {
 
             self.read_token();
             left = self.parse_infix_expression(left.unwrap());
+            if left.is_err() { return left; }
         }
 
         return left;
@@ -450,6 +451,34 @@ mod tests {
             let prefix = expr.as_any().downcast_ref::<PrefixExpression>().unwrap();
             assert_eq!(prefix.operator, expected_expr.operator);
             assert_eq!(prefix.value.to_string(), expected_expr.value.to_string());
+        }
+    }
+
+    #[test]
+    fn parse_prefix_and_infix_expressions() {
+        let input = vec![
+            (
+                "-1 >= 2",
+                InfixExpression::new(
+                    Box::new(PrefixExpression::new(TokenType::Minus, Box::new(IntExpression::new(1)))),
+                    TokenType::GreaterEqual,
+                    Box::new(IntExpression::new(2))
+                )
+            ),
+        ];
+
+        for (i, expected_expr) in input {
+            let mut parser = Parser::new(i.to_string());
+            let result = parser.parse_expression(INITIAL_PRECEDENCE);
+            assert_eq!(result.is_ok(), true, "{}", result.err().unwrap().message);
+
+            let expr = result.unwrap();
+            assert_eq!(expr.as_any().is::<InfixExpression>(), true, "{}", expr.to_string());
+
+            let infix = expr.as_any().downcast_ref::<InfixExpression>().unwrap();
+            assert_eq!(infix.left_value.to_string(), expected_expr.left_value.to_string());
+            assert_eq!(infix.operator, expected_expr.operator);
+            assert_eq!(infix.right_value.to_string(), expected_expr.right_value.to_string());
         }
     }
 }

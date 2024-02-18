@@ -179,6 +179,22 @@ impl Lexer {
 
                 },
                 '+' => Token::new(TokenType::Plus, ch.to_string()),
+                '<'  => {
+                    if let Some(other_character) = self.peek_char() && other_character == '=' {
+                        self.read_char();
+                        Token::new(TokenType::LowerEqual, "<=".to_string())
+                    }
+                    else { Token::new(TokenType::Lower, ch.to_string()) }
+
+                },
+                '>'  => {
+                    if let Some(other_character) = self.peek_char() && other_character == '=' {
+                        self.read_char();
+                        Token::new(TokenType::GreaterEqual, ">=".to_string())
+                    }
+                    else { Token::new(TokenType::Greater, ch.to_string()) }
+
+                },
                 '-' => Token::new(TokenType::Minus, ch.to_string()),
                 '*' => Token::new(TokenType::Star, ch.to_string()),
                 '(' => Token::new(TokenType::LeftParen, ch.to_string()),
