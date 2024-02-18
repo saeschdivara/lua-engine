@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, ElseIfStatement, Expression, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -62,6 +62,8 @@ impl Parser {
                 TokenType::DoubleSlash,
                 TokenType::Percent,
                 TokenType::Caret,
+
+                TokenType::LeftParen,
             ],
         };
 
@@ -323,12 +325,42 @@ impl Parser {
 
     fn parse_infix_expression(&mut self, left: Box<dyn Expression>) -> ExpressionParsingResult {
         let operator = self.current_token.token_type.clone();
+
+        match operator {
+            TokenType::LeftParen => return self.parse_function_call(left),
+            _ => {}
+        }
+
         let current_precedence = self.current_precedence();
 
         match self.parse_expression(current_precedence) {
             Ok(expr) => { Ok(Box::new(InfixExpression::new(left, operator, expr))) }
             Err(err) => { Err(err) }
         }
+    }
+
+    fn parse_function_call(&mut self, left: Box<dyn Expression>) -> ExpressionParsingResult {
+        let mut arguments = vec![];
+        while self.next_token.is_not(TokenType::RightParen) {
+            match self.parse_expression(INITIAL_PRECEDENCE) {
+                Ok(arg) => {
+                    arguments.push(arg);
+                }
+                Err(err) => return Err(err),
+            }
+
+            if self.next_token.is_not_one(vec![TokenType::Comma, TokenType::RightParen]) {
+                return Err(ParsingError::new(
+                    format!("Next token is neither comma nor ), instead is: {:?}", self.next_token.token_type.clone())
+                ))
+            }
+
+            if self.next_token.is(TokenType::Comma) {
+                self.read_token();
+            }
+        }
+
+        Ok(Box::new(CallExpression::new(left, arguments)))
     }
 
     fn peek_precedence(&self) -> i8 {
@@ -342,6 +374,7 @@ impl Parser {
     fn next_token_is_stop(&self) -> bool {
         return vec![
             TokenType::SemiColon,
+            TokenType::Comma,
             TokenType::Local,
             TokenType::Return,
             TokenType::For,
@@ -583,6 +616,22 @@ mod tests {
             ("1 + (2 + 3) + 4", "((1 Plus (2 Plus 3)) Plus 4)"),
             ("(5 + 5) * 2", "((5 Plus 5) Star 2)"),
             ("2 / (5 + 5)", "(2 Slash (5 Plus 5))"),
+        ];
+
+        for (i, expected_expr) in input {
+            let mut parser = Parser::new(i.to_string());
+            let result = parser.parse_expression(INITIAL_PRECEDENCE);
+            assert_eq!(result.is_ok(), true, "{}", result.err().unwrap().message);
+
+            let expr = result.unwrap();
+            assert_eq!(expr.to_string(), expected_expr);
+        }
+    }
+
+    #[test]
+    fn parse_call_expressions() {
+        let input = vec![
+            ("add(1, 2 * 3, 4 + 5)", "add([\"1\", \"(2 Star 3)\", \"(4 Plus 5)\"])"),
         ];
 
         for (i, expected_expr) in input {

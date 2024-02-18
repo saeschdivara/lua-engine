@@ -22,6 +22,7 @@ pub fn get_operator_precedence(token_type: TokenType) -> i8 {
         TokenType::Star | TokenType::Slash | TokenType::DoubleSlash | TokenType::Percent => 9,
         // 10 is reserved for prefix
         TokenType::Caret => 11,
+        TokenType::LeftParen => 12,
         _ => -1,
     }
 }
@@ -48,7 +49,7 @@ impl Debug for IntExpression {
     }
 }
 
-#[derive(Debug, SmartExpression)]
+#[derive(SmartExpression)]
 pub struct IdentifierExpression {
     pub identifier: String,
 }
@@ -56,6 +57,12 @@ pub struct IdentifierExpression {
 impl IdentifierExpression {
     pub fn new(identifier: String) -> Self {
         return Self { identifier }
+    }
+}
+
+impl Debug for IdentifierExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.identifier)
     }
 }
 
@@ -133,6 +140,31 @@ impl Debug for FunctionExpression {
                "({:?}) {:?} end",
                self.parameters,
                self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
+        )
+    }
+}
+
+#[derive(SmartExpression)]
+pub struct CallExpression {
+    pub function: Box<dyn Expression>,
+    pub arguments: Vec<Box<dyn Expression>>,
+}
+
+impl CallExpression {
+    pub fn new(function: Box<dyn Expression>, arguments: Vec<Box<dyn Expression>>) -> Self {
+        return Self {
+            function,
+            arguments,
+        }
+    }
+}
+
+impl Debug for CallExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,
+               "{}({:?})",
+               self.function.to_string(),
+               self.arguments.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
         )
     }
 }
