@@ -303,6 +303,25 @@ impl FunctionStatement {
     }
 }
 
+#[derive(SmartStatement)]
+pub struct FunctionCallStatement {
+    pub call: Box<dyn Expression>,
+}
+
+impl Debug for FunctionCallStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.call.to_string())
+    }
+}
+
+impl FunctionCallStatement {
+    pub fn new(call: Box<dyn Expression>) -> Self {
+        return Self {
+            call,
+        };
+    }
+}
+
 pub struct Program {
     pub statements: Vec<Box<dyn Statement>>,
 }

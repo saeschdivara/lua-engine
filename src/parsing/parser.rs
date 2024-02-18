@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -96,6 +96,7 @@ impl Parser {
             TokenType::Return       => self.parse_return(),
             TokenType::If           => self.parse_if(),
             TokenType::Function     => self.parse_function(),
+            TokenType::Identifier   => self.parse_function_call_statement(),
 
             _ => Err(self.create_error(format!("Unknown token_type found: {:?}", self.current_token.token_type)))
         }
@@ -117,6 +118,20 @@ impl Parser {
 
         match self.parse_expression(INITIAL_PRECEDENCE) {
             Ok(expr) => Ok(Box::new(AssignmentStatement::new(variable_token, expr))),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn parse_function_call_statement(&mut self) -> StatementParsingResult {
+        if self.next_token.is_not(TokenType::LeftParen) {
+            return Err(self.create_error(format!("Next token is not (: {:?}", self.next_token)))
+        }
+
+        let identifier = Box::new(IdentifierExpression::new(self.current_token.literal.clone()));
+
+        self.read_token();
+        match self.parse_function_call(identifier) {
+            Ok(call) => Ok(Box::new(FunctionCallStatement::new(call))),
             Err(err) => Err(err),
         }
     }
@@ -404,7 +419,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parsing::ast::{AssignmentStatement, Expression, FunctionStatement, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PrefixExpression, ReturnStatement, Statement};
+    use crate::parsing::ast::{AssignmentStatement, Expression, FunctionCallStatement, FunctionStatement, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PrefixExpression, ReturnStatement, Statement};
     use crate::parsing::lexer::TokenType;
     use crate::parsing::parser::Parser;
 
@@ -559,6 +574,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_simple_call_statement() {
+        let input = r#"
+            print(fact(4))
+        "#;
+
+        let mut parser = Parser::new(input.to_string());
+        let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
+        let statements = output_program.statements;
+
+        assert_eq!(statements.len(), 1);
+
+        let stmt = statements.first().unwrap();
+        assert!(stmt.as_any().is::<FunctionCallStatement>());
+    }
+
+    #[test]
     fn parse_simple_infix_expressions() {
         let input = vec![
             (
@@ -658,6 +689,7 @@ mod tests {
         let input = vec![
             ("add(n - 1)", "add([\"(n Minus 1)\"])"),
             ("add(1, 2 * 3, 4 + 5)", "add([\"1\", \"(2 Star 3)\", \"(4 Plus 5)\"])"),
+            ("print(fact(4))", "print([\"fact([\\\"4\\\"])\"])"),
         ];
 
         for (i, expected_expr) in input {
