@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, Expression, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, ElseIfStatement, Expression, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -141,9 +141,68 @@ impl Parser {
             TokenType::End,
         ]);
         
+        let if_block = match body_result {
+            Ok(body) => body,
+            Err(err) => return Err(err),
+        };
+
+        if self.current_token.is_not_one(vec![TokenType::ElseIf, TokenType::Else]) {
+            return Ok(Box::new(IfStatement::new(
+                condition,
+                if_block.statements,
+                vec![],
+                vec![]
+            )))
+        }
+
+        let mut elseif_blocks = vec![];
+
+        while self.current_token.is(TokenType::ElseIf) {
+            let elseif_stmt = self.parse_elseif();
+
+            match elseif_stmt {
+                Ok(stmt) => {
+                    elseif_blocks.push(stmt);
+                }
+                Err(err) => return Err(err)
+            }
+        }
+
+        if self.current_token.is(TokenType::Else) {
+            let body_result = self.parse_program(vec![TokenType::End]);
+
+            let else_block = match body_result {
+                Ok(body) => body,
+                Err(err) => return Err(err),
+            };
+            Ok(Box::new(IfStatement::new(condition, if_block.statements, elseif_blocks, else_block.statements)))
+        }
+        else {
+            Ok(Box::new(IfStatement::new(condition, if_block.statements, elseif_blocks, vec![])))
+        }
+    }
+
+    fn parse_elseif(&mut self) -> StatementParsingResult {
+        let condition = match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => expr,
+            Err(err) => return Err(err)
+        };
+
+        if self.next_token.is_not(TokenType::Then) {
+            return Err(ParsingError::new(format!("Next token is not then: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        let body_result = self.parse_program(vec![
+            TokenType::ElseIf,
+            TokenType::Else,
+            TokenType::End,
+        ]);
+
         match body_result {
-            Ok(body) => Ok(Box::new(IfStatement::new(condition, body.statements))),
-            Err(err) => Err(err),
+            Ok(body) => Ok(Box::new(ElseIfStatement::new(condition, body.statements))),
+            Err(err) => return Err(err),
         }
     }
 
@@ -390,6 +449,29 @@ mod tests {
         );
 
         assert_eq!(if_stmt.block.first().unwrap().to_string(), expected_block.to_string());
+    }
+
+    #[test]
+    fn parse_advanced_if_statement() {
+        let input = r#"
+            if n == 0 then
+                return 1
+            elseif n == 1 then
+                return 2
+            elseif n == 2 then
+                return 3
+            elseif n == 3 then
+                return 4
+            else
+                return 5
+            end
+        "#;
+
+        let mut parser = Parser::new(input.to_string());
+        let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
+        let statements = output_program.statements;
+
+        assert_eq!(statements.len(), 1);
     }
 
     #[test]

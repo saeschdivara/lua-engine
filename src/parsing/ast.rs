@@ -186,21 +186,58 @@ impl ReturnStatement {
 pub struct IfStatement {
     pub condition: Box<dyn Expression>,
     pub block: Vec<Box<dyn Statement>>,
+    pub elseif_blocks: Vec<Box<dyn Statement>>,
+    pub else_block: Vec<Box<dyn Statement>>,
 }
 
 impl Debug for IfStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-           "if {} then {:?} end",
+           "if {} then {:?} {:?} else {:?} end",
+           self.condition.to_string(),
+           self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
+           self.elseif_blocks.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
+           self.else_block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl IfStatement {
+    pub fn new(
+        condition: Box<dyn Expression>,
+        block: Vec<Box<dyn Statement>>,
+        elseif_blocks: Vec<Box<dyn Statement>>,
+        else_block: Vec<Box<dyn Statement>>,
+    ) -> Self {
+        return Self {
+            condition,
+            block,
+            elseif_blocks,
+            else_block,
+        };
+    }
+}
+
+#[derive(SmartStatement)]
+pub struct ElseIfStatement {
+    pub condition: Box<dyn Expression>,
+    pub block: Vec<Box<dyn Statement>>,
+}
+
+impl Debug for ElseIfStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+           "elseif {} then {:?} end",
            self.condition.to_string(),
            self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>()
         )
     }
 }
 
-impl IfStatement {
-    pub fn new(condition: Box<dyn Expression>, block: Vec<Box<dyn Statement>>,) -> Self {
+impl ElseIfStatement {
+    pub fn new(condition: Box<dyn Expression>, block: Vec<Box<dyn Statement>>) -> Self {
         return Self {
             condition,
             block,
