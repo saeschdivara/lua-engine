@@ -6,4 +6,4 @@ function fact(n)
     end
 end
 
-print(fact(4))
+fact(4)
