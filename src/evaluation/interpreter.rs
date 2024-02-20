@@ -25,18 +25,17 @@ pub struct Scope {
     pub variables: HashMap<String, Value>,
 }
 
+pub struct Callstack {
+    pub variables: Vec<HashMap<String, Value>>,
+}
+
 pub struct Interpreter {
-    global_scope: Scope,
     return_value: Option<Value>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         return Self {
-            global_scope: Scope {
-                variables: HashMap::new(),
-            },
-
             return_value: None,
         };
     }
@@ -58,18 +57,20 @@ impl Interpreter {
             }
         };
 
+        let mut call_stack = Callstack { variables: vec![HashMap::new()] };
+
         for statement in statements {
-            self.eval_statement(&statement);
+            self.eval_statement(&statement, &mut call_stack);
         }
     }
 
-    fn eval_statement(&mut self, stmt: &Box<dyn Statement>) {
+    fn eval_statement(&mut self, stmt: &Box<dyn Statement>, callstack: &mut Callstack) {
         if let Some(func) = stmt.as_any().downcast_ref::<FunctionStatement>() {
             let function = func.function.clone();
-            self.global_scope.variables.insert(func.name.clone(), Function(function));
+            callstack.variables.last_mut().unwrap().insert(func.name.clone(), Function(function));
         } else if let Some(call) = stmt.as_any().downcast_ref::<FunctionCallStatement>() {
             if let Some(call_expr) = call.call.as_any().downcast_ref::<CallExpression>() {
-                match self.eval_call_expression(call_expr) {
+                match self.eval_call_expression(call_expr, callstack) {
                     Ok(_) => {}
                     Err(err) => {
                         eprintln!("Failed function call statement: {}", err.message)
@@ -79,14 +80,14 @@ impl Interpreter {
                 eprintln!("Failed to get call expr");
             }
         } else if let Some(if_stmt) = stmt.as_any().downcast_ref::<IfStatement>() {
-            match self.eval_if_statement(if_stmt) {
+            match self.eval_if_statement(if_stmt, callstack) {
                 Ok(_) => {}
                 Err(err) => {
                     eprintln!("Failed if statement: {}", err.message)
                 }
             }
         } else if let Some(return_stmt) = stmt.as_any().downcast_ref::<ReturnStatement>() {
-            match self.eval_return_statement(return_stmt) {
+            match self.eval_return_statement(return_stmt, callstack) {
                 Ok(val) => {
                     self.return_value = Some(val);
                 }
@@ -97,23 +98,24 @@ impl Interpreter {
         }
     }
 
-    fn eval_function(&mut self, function: Rc<FunctionExpression>, arguments: &Vec<Box<dyn Expression>>, scope: Scope) -> EvalResult {
+    fn eval_function(&mut self, function: Rc<FunctionExpression>, arguments: &Vec<Box<dyn Expression>>, callstack: &mut Callstack) -> EvalResult {
+        let mut new_scope = HashMap::new();
         for i in 0..function.parameters.len() {
             let parameter = &function.parameters[i];
             let argument = &arguments[i];
 
-            let scope = Scope { variables: HashMap::new() };
-
-            match self.eval_expression(argument, scope) {
+            match self.eval_expression(argument, callstack) {
                 Ok(val) => {
-                    self.global_scope.variables.insert(parameter.clone(), val);
+                    new_scope.insert(parameter.clone(), val);
                 }
                 Err(err) => return Err(err)
             }
         }
 
+        callstack.variables.push(new_scope);
+
         for stmt in &function.block {
-            self.eval_statement(stmt);
+            self.eval_statement(stmt, callstack);
 
             if stmt.as_any().is::<ReturnStatement>() {
                 if let Some(return_value) = &self.return_value {
@@ -127,23 +129,23 @@ impl Interpreter {
         return Ok(Value::Nil);
     }
 
-    fn eval_if_statement(&mut self, stmt: &IfStatement) -> EvalResult {
-        let is_true = self.eval_condition(&stmt.condition);
+    fn eval_if_statement(&mut self, stmt: &IfStatement, callstack: &mut Callstack) -> EvalResult {
+        let is_true = self.eval_condition(&stmt.condition, callstack);
 
         if is_true {
             for statement in &stmt.block {
-                self.eval_statement(statement);
+                self.eval_statement(statement, callstack);
             }
         } else {
             let mut elseif_executed = false;
             for elseif_block in &stmt.elseif_blocks {
                 if let Some(elseif_stmt) = elseif_block.as_any().downcast_ref::<ElseIfStatement>() {
-                    let is_true = self.eval_condition(&elseif_stmt.condition);
+                    let is_true = self.eval_condition(&elseif_stmt.condition, callstack);
                     if is_true {
                         elseif_executed = true;
 
                         for statement in &stmt.block {
-                            self.eval_statement(statement);
+                            self.eval_statement(statement, callstack);
                         }
                         break;
                     }
@@ -152,7 +154,7 @@ impl Interpreter {
 
             if !elseif_executed {
                 for statement in &stmt.else_block {
-                    self.eval_statement(&statement);
+                    self.eval_statement(&statement, callstack);
                 }
             }
         }
@@ -160,16 +162,15 @@ impl Interpreter {
         return Ok(Value::Nil);
     }
 
-    fn eval_return_statement(&mut self, stmt: &ReturnStatement) -> EvalResult {
-        let scope = Scope { variables: HashMap::new() };
-        return self.eval_expression(&stmt.value, scope);
+    fn eval_return_statement(&mut self, stmt: &ReturnStatement, callstack: &mut Callstack) -> EvalResult {
+        return self.eval_expression(&stmt.value, callstack);
     }
 
-    fn eval_expression(&mut self, expr: &Box<dyn Expression>, scope: Scope) -> EvalResult {
+    fn eval_expression(&mut self, expr: &Box<dyn Expression>, callstack: &mut Callstack) -> EvalResult {
         if let Some(int_expr) = expr.as_any().downcast_ref::<IntExpression>() {
             Ok(Value::Number(NumberType::Int(int_expr.value)))
         } else if let Some(ident_expr) = expr.as_any().downcast_ref::<IdentifierExpression>() {
-            if let Some(val) = self.global_scope.variables.get(&ident_expr.identifier) {
+            if let Some(val) = self.get_variable_value(&ident_expr.identifier, callstack) {
                 Ok(val.clone())
             } else {
                 Err(EvalError::new(format!("Could not find variable: {}", &ident_expr.identifier)))
@@ -177,21 +178,19 @@ impl Interpreter {
         } else if let Some(expr) = expr.as_any().downcast_ref::<PrefixExpression>() {
             self.eval_prefix_expression(expr)
         } else if let Some(expr) = expr.as_any().downcast_ref::<InfixExpression>() {
-            self.eval_infix_expression(expr)
+            self.eval_infix_expression(expr, callstack)
         } else if let Some(expr) = expr.as_any().downcast_ref::<CallExpression>() {
-            self.eval_call_expression(expr)
+            self.eval_call_expression(expr, callstack)
         } else {
             Ok(Value::Nil)
         }
     }
 
-    fn eval_call_expression(&mut self, expr: &CallExpression) -> EvalResult {
-        let scope = Scope { variables: HashMap::new() };
-        match self.eval_expression(&expr.function, scope) {
+    fn eval_call_expression(&mut self, expr: &CallExpression, callstack: &mut Callstack) -> EvalResult {
+        match self.eval_expression(&expr.function, callstack) {
             Ok(function_val) => {
                 if let Function(func) = function_val {
-                    let scope = Scope { variables: HashMap::new() };
-                    return self.eval_function(func, &expr.arguments, scope)
+                    return self.eval_function(func, &expr.arguments, callstack)
                 } else {
                     Err(EvalError::new("Unknown function error".to_string()))
                 }
@@ -204,15 +203,13 @@ impl Interpreter {
         Ok(Value::Nil)
     }
 
-    fn eval_infix_expression(&mut self, expr: &InfixExpression) -> EvalResult {
-        let scope = Scope { variables: HashMap::new() };
-        let left = match self.eval_expression(&expr.left_value, scope) {
+    fn eval_infix_expression(&mut self, expr: &InfixExpression, callstack: &mut Callstack) -> EvalResult {
+        let left = match self.eval_expression(&expr.left_value, callstack) {
             Ok(val) => val,
             Err(err) => return Err(err),
         };
 
-        let scope = Scope { variables: HashMap::new() };
-        let right = match self.eval_expression(&expr.right_value, scope) {
+        let right = match self.eval_expression(&expr.right_value, callstack) {
             Ok(val) => val,
             Err(err) => return Err(err),
         };
@@ -228,7 +225,16 @@ impl Interpreter {
                     |l, r| { Value::Number(NumberType::Int(l + r)) })
                 );
             }
-            TokenType::Minus => {}
+            TokenType::Minus => {
+                if !left.is_number() || !right.is_number() {
+                    return Err(EvalError::new("Wrong type used for plus".to_string()));
+                }
+
+                return Ok(self.eval_operation_on_int(
+                    &left, &right,
+                    |l, r| { Value::Number(NumberType::Int(l - r)) })
+                );
+            }
             TokenType::Star => {
                 if !left.is_number() || !right.is_number() {
                     return Err(EvalError::new("Wrong type used for plus".to_string()));
@@ -274,9 +280,8 @@ impl Interpreter {
         panic!("Should never reach this")
     }
 
-    fn eval_condition(&mut self, condition: &Box<dyn Expression>) -> bool {
-        let scope = Scope { variables: HashMap::new() };
-        let condition = self.eval_expression(condition, scope);
+    fn eval_condition(&mut self, condition: &Box<dyn Expression>, callstack: &mut Callstack) -> bool {
+        let condition = self.eval_expression(condition, callstack);
 
         let condition_res = match condition {
             Ok(condition_res) => condition_res,
@@ -287,5 +292,13 @@ impl Interpreter {
             Value::Boolean(bool_val) => bool_val,
             _ => return false
         };
+    }
+
+    fn get_variable_value<'a>(&'a self, variable: &String, callstack: &'a mut Callstack) -> Option<&Value> {
+        callstack.variables
+            .iter()
+            .rev()
+            .find(|x| {x.contains_key(variable)})
+            .map(move |t| {t.get(variable).unwrap()})
     }
 }
