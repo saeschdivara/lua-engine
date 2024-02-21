@@ -1,25 +1,10 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::evaluation::typing::{NumberType, Value};
+use crate::evaluation::typing::{EvalError, EvalResult, EvalStatementResult, FunctionType, NativeFunc, NumberType, Value};
 use crate::evaluation::typing::Value::Function;
 use crate::parsing::ast::*;
 use crate::parsing::lexer::TokenType;
 use crate::parsing::parser::Parser;
-
-pub struct EvalError {
-    pub message: String,
-}
-
-impl EvalError {
-    pub fn new(message: String) -> Self {
-        Self {
-            message,
-        }
-    }
-}
-
-type EvalResult = Result<Value, EvalError>;
-type EvalStatementResult = Result<(), EvalError>;
 
 pub struct Scope {
     pub variables: HashMap<String, Value>,
@@ -85,7 +70,7 @@ impl Interpreter {
     fn eval_statement(&mut self, stmt: &Box<dyn Statement>, callstack: &mut Callstack) -> EvalStatementResult {
         if let Some(func) = stmt.as_any().downcast_ref::<FunctionStatement>() {
             let function = func.function.clone();
-            callstack.variables.last_mut().unwrap().insert(func.name.clone(), Function(function));
+            callstack.variables.last_mut().unwrap().insert(func.name.clone(), Function(FunctionType::Expression(function)));
             Ok(())
         } else if let Some(call) = stmt.as_any().downcast_ref::<FunctionCallStatement>() {
             if let Some(call_expr) = call.call.as_any().downcast_ref::<CallExpression>() {
@@ -146,6 +131,21 @@ impl Interpreter {
         self.return_value = None;
 
         return Ok(return_value)
+    }
+
+    fn eval_native_function(&mut self, function: NativeFunc, arguments: &Vec<Box<dyn Expression>>, callstack: &mut Callstack) -> EvalResult {
+        let mut evaluated_args = vec![];
+
+        for argument in arguments {
+            match self.eval_expression(argument, callstack) {
+                Ok(val) => {
+                    evaluated_args.push(val);
+                }
+                Err(err) => return Err(err)
+            }
+        }
+
+        return function(&evaluated_args)
     }
 
     fn eval_if_statement(&mut self, stmt: &IfStatement, callstack: &mut Callstack) -> EvalResult {
@@ -215,8 +215,11 @@ impl Interpreter {
     fn eval_call_expression(&mut self, expr: &CallExpression, callstack: &mut Callstack) -> EvalResult {
         match self.eval_expression(&expr.function, callstack) {
             Ok(function_val) => {
-                if let Function(func) = function_val {
-                    self.eval_function(func, &expr.arguments, callstack)
+                if let Function(func_type) = function_val {
+                    match func_type {
+                        FunctionType::Native(func) => self.eval_native_function(func, &expr.arguments, callstack),
+                        FunctionType::Expression(func) => self.eval_function(func, &expr.arguments, callstack),
+                    }
                 } else {
                     Err(EvalError::new("Unknown function error".to_string()))
                 }

@@ -1,5 +1,21 @@
 use std::rc::Rc;
-use crate::parsing::ast::FunctionExpression;
+use crate::parsing::ast::{Expression, FunctionExpression};
+
+pub struct EvalError {
+    pub message: String,
+}
+
+impl EvalError {
+    pub fn new(message: String) -> Self {
+        Self {
+            message,
+        }
+    }
+}
+
+pub type EvalResult = Result<Value, EvalError>;
+pub type EvalStatementResult = Result<(), EvalError>;
+pub type NativeFunc = fn(args: &Vec<Value>) -> EvalResult;
 
 #[derive(Clone)]
 pub enum NumberType {
@@ -8,12 +24,18 @@ pub enum NumberType {
 }
 
 #[derive(Clone)]
+pub enum FunctionType {
+    Native(NativeFunc),
+    Expression(Rc<FunctionExpression>),
+}
+
+#[derive(Clone)]
 pub enum Value {
     Nil,
     Boolean(bool),
     Number(NumberType),
     String(String),
-    Function(Rc<FunctionExpression>),
+    Function(FunctionType),
     UserData,
     Thread,
     Table,
