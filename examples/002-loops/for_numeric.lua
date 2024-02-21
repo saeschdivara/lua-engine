@@ -1,4 +1,5 @@
 function f(x)
+    print("foo", x)
 	return x+1
 end
 

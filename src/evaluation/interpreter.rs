@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::HashMap;
 use std::rc::Rc;
 use crate::evaluation::typing::{EvalError, EvalResult, EvalStatementResult, FunctionType, NativeFunc, NumberType, Value};
@@ -369,7 +370,7 @@ impl Interpreter {
         } else if let Some(expr) = expr.as_any().downcast_ref::<StringExpression>() {
             Ok(Value::String(expr.value.clone()))
         } else if let Some(expr) = expr.as_any().downcast_ref::<PrefixExpression>() {
-            self.eval_prefix_expression(expr)
+            self.eval_prefix_expression(expr, callstack)
         } else if let Some(expr) = expr.as_any().downcast_ref::<InfixExpression>() {
             self.eval_infix_expression(expr, callstack)
         } else if let Some(expr) = expr.as_any().downcast_ref::<CallExpression>() {
@@ -395,8 +396,21 @@ impl Interpreter {
         }
     }
 
-    fn eval_prefix_expression(&mut self, expr: &PrefixExpression) -> EvalResult {
-        Ok(Value::Nil)
+    fn eval_prefix_expression(&mut self, expr: &PrefixExpression, callstack: &mut Callstack) -> EvalResult {
+        let value = match self.eval_expression(&expr.value, callstack) {
+            Ok(val) => val,
+            Err(err) => return Err(err),
+        };
+
+        match expr.operator {
+            TokenType::Minus => {
+                if !value.is_number() { return Err(EvalError::new(format!("- is not supported as prefix for non-numbers: {:?}", value))) }
+
+                let minus_factor = Value::Number(NumberType::Int(-1));
+                Ok(value.multiply(&minus_factor))
+            }
+            _ => return Err(EvalError::new(format!("Used unknown prefix operator: {:?}", expr.operator)))
+        }
     }
 
     fn eval_infix_expression(&mut self, expr: &InfixExpression, callstack: &mut Callstack) -> EvalResult {
