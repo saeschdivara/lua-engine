@@ -175,15 +175,30 @@ pub trait Statement {
     fn to_string(&self) -> String;
 }
 
+pub enum AssignmentType {
+    Local,
+    Reassignment
+}
+
 #[derive(SmartStatement)]
 pub struct AssignmentStatement {
+    pub assignment_type: AssignmentType,
     pub variable: Token,
     pub value: Box<dyn Expression>,
 }
 
 impl AssignmentStatement {
-    pub fn new(variable: Token, value: Box<dyn Expression>) -> Self {
+    pub fn local(variable: Token, value: Box<dyn Expression>) -> Self {
         return Self {
+            assignment_type: AssignmentType::Local,
+            variable,
+            value,
+        };
+    }
+
+    pub fn reassignment(variable: Token, value: Box<dyn Expression>) -> Self {
+        return Self {
+            assignment_type: AssignmentType::Reassignment,
             variable,
             value,
         };

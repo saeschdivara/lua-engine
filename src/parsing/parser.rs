@@ -97,7 +97,13 @@ impl Parser {
             TokenType::If           => self.parse_if(),
             TokenType::While        => self.parse_while_loop(),
             TokenType::Function     => self.parse_function(),
-            TokenType::Identifier   => self.parse_function_call_statement(),
+            TokenType::Identifier   => {
+                match self.next_token.token_type {
+                    TokenType::LeftParen => self.parse_function_call_statement(),
+                    TokenType::Equal => self.parse_variable_assignment(),
+                    _ => Err(self.create_error(format!("Unknown token_type found after identifier: {:?}", self.next_token.token_type)))
+                }
+            },
 
             _ => Err(self.create_error(format!("Unknown token_type found: {:?}", self.current_token.token_type)))
         }
@@ -118,7 +124,22 @@ impl Parser {
         self.read_token();
 
         match self.parse_expression(INITIAL_PRECEDENCE) {
-            Ok(expr) => Ok(Box::new(AssignmentStatement::new(variable_token, expr))),
+            Ok(expr) => Ok(Box::new(AssignmentStatement::local(variable_token, expr))),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn parse_variable_assignment(&mut self) -> StatementParsingResult {
+        let variable_token = self.current_token.clone();
+
+        if self.next_token.is_not(TokenType::Equal) {
+            return Err(self.create_error(format!("Next token is not equals: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => Ok(Box::new(AssignmentStatement::reassignment(variable_token, expr))),
             Err(err) => Err(err),
         }
     }
