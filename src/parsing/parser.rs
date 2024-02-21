@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -32,6 +32,7 @@ impl Parser {
             prefix_tokens: vec![
                 TokenType::Int,
                 TokenType::Identifier,
+                TokenType::String,
                 TokenType::Minus,
                 TokenType::Tilde,
                 TokenType::LeftParen,
@@ -373,6 +374,11 @@ impl Parser {
                 self.read_token();
                 let tok = self.current_token.clone();
                 Ok(Box::new(IdentifierExpression::new(tok.literal)))
+            },
+            TokenType::String => {
+                self.read_token();
+                let tok = self.current_token.clone();
+                Ok(Box::new(StringExpression::new(tok.literal)))
             },
             TokenType::LeftParen => {
                 self.read_token();

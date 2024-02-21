@@ -6,6 +6,7 @@ pub enum TokenType {
     Identifier,
     Int,
     Float,
+    String,
 
     Plus,
     Minus,
@@ -167,6 +168,10 @@ impl Lexer {
 
         let tok = if let Some(ch) = self.ch {
             match ch {
+                '"' => {
+                    let str_val = self.read_string();
+                    self.create_token(TokenType::String, str_val)
+                },
                 ',' => self.create_token(TokenType::Comma, ch.to_string()),
                 '=' => {
                     if let Some(other_character) = self.peek_char() && other_character == '=' {
@@ -263,6 +268,25 @@ impl Lexer {
         }
 
         return identifier;
+    }
+
+    fn read_string(&mut self) -> String {
+        let mut string_val = String::new();
+
+        if let Some(ch) = self.ch {
+            string_val.push(ch);
+        }
+
+        while let Some(ch) = self.peek_char() {
+            if ch == '"' { break }
+
+            string_val.push(ch);
+            self.read_char();
+        }
+
+        self.read_char();
+
+        return string_val;
     }
 
     fn read_number(&mut self) -> String {

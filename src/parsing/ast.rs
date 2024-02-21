@@ -68,6 +68,23 @@ impl Debug for IdentifierExpression {
 }
 
 #[derive(SmartExpression)]
+pub struct StringExpression {
+    pub value: String,
+}
+
+impl StringExpression {
+    pub fn new(value: String) -> Self {
+        return Self { value }
+    }
+}
+
+impl Debug for StringExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\"{}\"", self.value)
+    }
+}
+
+#[derive(SmartExpression)]
 pub struct PrefixExpression {
     pub operator: TokenType,
     pub value: Box<dyn Expression>,
