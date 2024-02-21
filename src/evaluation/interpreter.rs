@@ -1,7 +1,7 @@
-use std::cmp::min;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::evaluation::typing::{EvalError, EvalResult, EvalStatementResult, FunctionType, NativeFunc, NumberType, Value};
+
+use crate::evaluation::typing::*;
 use crate::evaluation::typing::Value::Function;
 use crate::parsing::ast::*;
 use crate::parsing::lexer::TokenType;
@@ -53,7 +53,7 @@ impl Interpreter {
         let mut callstack = Callstack { variables: vec![HashMap::new()], return_triggered: false };
 
         let my_print = |args: &Vec<Value>| -> EvalResult {
-            args.iter().for_each(|v| {print!("{:?}", v);});
+            args.iter().for_each(|v| {print!("{:?} ", v);});
             println!();
             Ok(Value::Nil)
         };
@@ -311,7 +311,7 @@ impl Interpreter {
 
         loop {
             let current_counter_val = self.get_variable_value(&variable_name, callstack).unwrap();
-            if current_counter_val.is_equals(&value_to_stop) { break }
+            let will_stop = current_counter_val.is_equals(&value_to_stop);
 
             match self.eval_all_statements(&stmt.block, callstack) {
                 Ok(_) => {
@@ -323,6 +323,8 @@ impl Interpreter {
             let current_counter_val = self.get_variable_value(&variable_name, callstack).unwrap();
             let new_counter_val = current_counter_val.plus(&increment_value);
             callstack.variables.last_mut().unwrap().insert(variable_name.clone(), new_counter_val);
+
+            if will_stop { break }
         }
 
         callstack.variables.pop();
