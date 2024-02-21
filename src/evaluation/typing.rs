@@ -1,5 +1,6 @@
 use std::rc::Rc;
-use crate::parsing::ast::{Expression, FunctionExpression};
+
+use crate::parsing::ast::FunctionExpression;
 
 pub struct EvalError {
     pub message: String,

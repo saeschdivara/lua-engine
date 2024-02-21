@@ -107,9 +107,16 @@ impl Interpreter {
                     Err(EvalError::new(format!("Failed return statement: {}", err.message)))
                 }
             }
+        } else if let Some(stmt) = stmt.as_any().downcast_ref::<AssignmentStatement>() {
+            match self.eval_assignment_statement(stmt, callstack) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    Err(EvalError::new(format!("Failed assignment statement: {}", err.message)))
+                }
+            }
         }
         else {
-            Err(EvalError::new("Unknown statement type found".to_string()))
+            Err(EvalError::new(format!("Unknown statement type found: {}", stmt.to_string())))
         }
     }
 
@@ -197,6 +204,34 @@ impl Interpreter {
         callstack.variables.pop();
 
         return result;
+    }
+
+    fn eval_assignment_statement(&mut self, stmt: &AssignmentStatement, callstack: &mut Callstack) -> EvalResult {
+        let result = match self.eval_expression(&stmt.value, callstack) {
+            Ok(val) => val,
+            Err(err) => return Err(err)
+        };
+
+        let variable_name = &stmt.variable.literal;
+
+        match stmt.assignment_type {
+            AssignmentType::Local => {
+                match self.get_variable_value(variable_name, callstack) {
+                    None => {
+                        callstack.variables.last_mut().unwrap().insert(variable_name.clone(), result);
+                    }
+                    Some(_) => {
+                        // currently considered not allowed
+                        return Err(EvalError::new(format!("Cannot redeclare variable: {}", variable_name)))
+                    }
+                }
+            }
+            AssignmentType::Reassignment => {
+                callstack.variables.last_mut().unwrap().insert(variable_name.clone(), result);
+            }
+        }
+
+        return Ok(Value::Nil);
     }
 
     fn eval_expression(&mut self, expr: &Box<dyn Expression>, callstack: &mut Callstack) -> EvalResult {

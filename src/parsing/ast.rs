@@ -207,7 +207,10 @@ impl AssignmentStatement {
 
 impl Debug for AssignmentStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "local {:?} = {}", self.variable, self.value.to_string())
+        match self.assignment_type {
+            AssignmentType::Local => write!(f, "local {} = {}", self.variable.literal, self.value.to_string()),
+            AssignmentType::Reassignment => write!(f, "{} = {}", self.variable.literal, self.value.to_string()),
+        }
     }
 }
 

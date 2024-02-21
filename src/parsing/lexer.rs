@@ -107,16 +107,6 @@ pub struct Token {
 }
 
 impl Token {
-    fn new(token_type: TokenType, literal: String) -> Self {
-        return Self {
-            token_type,
-            literal,
-            file_path: "".to_string(),
-            line: 0,
-            column: 0,
-        };
-    }
-
     pub fn empty() -> Self {
         return Self {
             token_type: TokenType::Illegal,
