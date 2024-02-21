@@ -794,14 +794,7 @@ mod tests {
             ("2 / (5 + 5)", "(2 Slash (5 Plus 5))"),
         ];
 
-        for (i, expected_expr) in input {
-            let mut parser = Parser::new(i.to_string());
-            let result = parser.parse_expression(INITIAL_PRECEDENCE);
-            assert_eq!(result.is_ok(), true, "{}", result.err().unwrap().message);
-
-            let expr = result.unwrap();
-            assert_eq!(expr.to_string(), expected_expr);
-        }
+        test_expressions(input);
     }
 
     #[test]
@@ -812,9 +805,35 @@ mod tests {
             ("print(fact(4))", "print([\"fact([\\\"4\\\"])\"])"),
         ];
 
+        test_expressions(input);
+    }
+
+    #[test]
+    fn parse_table_expressions() {
+        let input = vec![
+            ("days = { \"Sunday\", \"Monday\" }", "days = { \"Sunday\", \"Monday\" }"),
+        ];
+
+        test_statements(input);
+    }
+
+    fn test_expressions(input: Vec<(&str, &str)>) {
         for (i, expected_expr) in input {
             let mut parser = Parser::new(i.to_string());
             let result = parser.parse_expression(INITIAL_PRECEDENCE);
+            assert_eq!(result.is_ok(), true, "{}", result.err().unwrap().message);
+
+            let expr = result.unwrap();
+            assert_eq!(expr.to_string(), expected_expr);
+        }
+    }
+
+    fn test_statements(input: Vec<(&str, &str)>) {
+        for (i, expected_expr) in input {
+            let mut parser = Parser::new(i.to_string());
+            parser.read_token();
+
+            let result = parser.parse_statement();
             assert_eq!(result.is_ok(), true, "{}", result.err().unwrap().message);
 
             let expr = result.unwrap();
