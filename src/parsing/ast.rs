@@ -196,6 +196,55 @@ impl Debug for AssignmentStatement {
     }
 }
 
+pub enum LoopType {
+    While
+}
+
+#[derive(SmartStatement)]
+pub struct LoopStatement {
+    pub loop_type: LoopType,
+    pub condition: Box<dyn Expression>,
+    pub block: Vec<Box<dyn Statement>>,
+}
+
+impl LoopStatement {
+    pub fn new(
+        condition: Box<dyn Expression>,
+        block: Vec<Box<dyn Statement>>,
+        loop_type: LoopType) -> Self {
+        return Self {
+            condition,
+            block,
+            loop_type,
+        };
+    }
+
+    pub fn while_loop(
+        condition: Box<dyn Expression>,
+        block: Vec<Box<dyn Statement>>) -> Self {
+        return Self {
+            condition,
+            block,
+            loop_type: LoopType::While,
+        };
+    }
+}
+
+impl Debug for LoopStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.loop_type {
+            LoopType::While => {
+                write!(
+                    f,
+                    "while {} do {:?} end",
+                    self.condition.to_string(),
+                    self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>()
+                )
+            }
+        }
+    }
+}
+
 #[derive(SmartStatement)]
 pub struct ReturnStatement {
     pub value: Box<dyn Expression>,

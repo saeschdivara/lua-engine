@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -95,6 +95,7 @@ impl Parser {
             TokenType::Local        => self.parse_local_assignment(),
             TokenType::Return       => self.parse_return(),
             TokenType::If           => self.parse_if(),
+            TokenType::While        => self.parse_while_loop(),
             TokenType::Function     => self.parse_function(),
             TokenType::Identifier   => self.parse_function_call_statement(),
 
@@ -134,6 +135,30 @@ impl Parser {
             Ok(call) => Ok(Box::new(FunctionCallStatement::new(call))),
             Err(err) => Err(err),
         }
+    }
+
+    fn parse_while_loop(&mut self) -> StatementParsingResult {
+        let condition = match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => expr,
+            Err(err) => return Err(err)
+        };
+
+        if self.next_token.is_not(TokenType::Do) {
+            return Err(self.create_error(format!("Next token is not do: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        let body_result = self.parse_program(vec![
+            TokenType::End,
+        ]);
+
+        let block = match body_result {
+            Ok(body) => body,
+            Err(err) => return Err(err),
+        };
+
+        return Ok(Box::new(LoopStatement::while_loop(condition, block.statements)));
     }
 
     fn parse_if(&mut self) -> StatementParsingResult {
