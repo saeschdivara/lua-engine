@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -97,7 +97,8 @@ impl Parser {
             TokenType::Return       => self.parse_return(),
             TokenType::If           => self.parse_if(),
             TokenType::While        => self.parse_while_loop(),
-            TokenType::Repeat        => self.parse_repeat_loop(),
+            TokenType::Repeat       => self.parse_repeat_loop(),
+            TokenType::For          => self.parse_for_loop(),
             TokenType::Function     => self.parse_function(),
             TokenType::Identifier   => {
                 match self.next_token.token_type {
@@ -200,6 +201,54 @@ impl Parser {
         };
 
         return Ok(Box::new(LoopStatement::repeat_loop(condition, block.statements)));
+    }
+
+    fn parse_for_loop(&mut self) -> StatementParsingResult {
+        self.read_token();
+
+        let assignment = match self.parse_variable_assignment() {
+            Ok(body) => body,
+            Err(err) => return Err(err),
+        };
+
+        if self.next_token.is_not(TokenType::Comma) {
+            return Err(self.create_error(format!("Next token is not ,: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        let end_int = match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => expr,
+            Err(err) => return Err(err)
+        };
+
+        let increment_value = if self.next_token.is(TokenType::Comma) {
+            self.read_token();
+
+            match self.parse_expression(INITIAL_PRECEDENCE) {
+                Ok(expr) => expr,
+                Err(err) => return Err(err)
+            }
+        } else {
+            Box::new(IntExpression::new(1))
+        };
+
+        if self.next_token.is_not(TokenType::Do) {
+            return Err(self.create_error(format!("Next token is not do: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        let body_result = self.parse_program(vec![
+            TokenType::End,
+        ]);
+
+        let block = match body_result {
+            Ok(body) => body,
+            Err(err) => return Err(err),
+        };
+
+        return Ok(Box::new(ForStatement::new(assignment, end_int, increment_value, block.statements)));
     }
 
     fn parse_if(&mut self) -> StatementParsingResult {

@@ -288,6 +288,50 @@ impl Debug for LoopStatement {
     }
 }
 
+// Lua docs:
+// The for loop has some subtleties that you should learn in order to make good use of it.
+// First, all three expressions are evaluated once, before the loop starts.
+// Second, the control variable is a local variable automatically declared by
+// the for statement and is visible only inside the loop.
+// A typical mistake is to assume that the variable still exists after the loop ends
+#[derive(SmartStatement)]
+pub struct ForStatement {
+    pub initial_variable: Box<dyn Statement>,
+    pub end_value: Box<dyn Expression>,
+    pub increment_value: Box<dyn Expression>,
+    pub block: Vec<Box<dyn Statement>>,
+}
+
+impl Debug for ForStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "for {}, {}, {} do {:?} end",
+            self.initial_variable.to_string(),
+            self.end_value.to_string(),
+            self.increment_value.to_string(),
+            self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl ForStatement {
+    pub fn new(
+        initial_variable:
+        Box<dyn Statement>,
+        end_value: Box<dyn Expression>,
+        increment_value: Box<dyn Expression>,
+        block: Vec<Box<dyn Statement>>
+    ) -> Self {
+        return Self {
+            initial_variable,
+            end_value,
+            increment_value,
+            block,
+        };
+    }
+}
+
 #[derive(SmartStatement)]
 pub struct ReturnStatement {
     pub value: Box<dyn Expression>,
