@@ -114,6 +114,13 @@ impl Interpreter {
                     Err(EvalError::new(format!("Failed assignment statement: {}", err.message)))
                 }
             }
+        } else if let Some(stmt) = stmt.as_any().downcast_ref::<LoopStatement>() {
+            match self.eval_loop_statement(stmt, callstack) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    Err(EvalError::new(format!("Failed loop statement: {}", err.message)))
+                }
+            }
         }
         else {
             Err(EvalError::new(format!("Unknown statement type found: {}", stmt.to_string())))
@@ -204,6 +211,33 @@ impl Interpreter {
         callstack.variables.pop();
 
         return result;
+    }
+
+    fn eval_loop_statement(&mut self, stmt: &LoopStatement, callstack: &mut Callstack) -> EvalResult {
+        match stmt.loop_type {
+            LoopType::While => {
+                loop {
+                    match self.eval_expression(&stmt.condition, callstack) {
+                        Ok(condition) => {
+                            if !condition.is_boolean() { return Err(EvalError::new(format!("While condition evaluates to non-bool value: {:?}", condition))) }
+
+                            let Value::Boolean(condition) = condition else { todo!() };
+                            if condition {
+                                match self.eval_all_statements(&stmt.block, callstack) {
+                                    Ok(_) => {}
+                                    Err(err) => return Err(err)
+                                }
+                            } else {
+                                break
+                            }
+                        }
+                        Err(err) => return Err(err)
+                    }
+                }
+            },
+        }
+
+        return Ok(Value::Nil);
     }
 
     fn eval_assignment_statement(&mut self, stmt: &AssignmentStatement, callstack: &mut Callstack) -> EvalResult {
