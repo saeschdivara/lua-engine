@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression, TableExpression};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -36,6 +36,7 @@ impl Parser {
                 TokenType::Minus,
                 TokenType::Tilde,
                 TokenType::LeftParen,
+                TokenType::LeftBrace,
             ],
             infix_tokens: vec![
                 TokenType::Or,
@@ -441,6 +442,24 @@ impl Parser {
                     expr
                 }
             },
+            TokenType::LeftBrace => {
+                self.read_token();
+                let mut values = vec![];
+                loop {
+                    if self.next_token.is(TokenType::RightBrace) { break }
+
+                    let expr = match self.parse_expression(INITIAL_PRECEDENCE) {
+                        Ok(expr) => { expr }
+                        Err(err) => { return Err(err) }
+                    };
+
+                    values.push(expr);
+
+                    if self.next_token.is(TokenType::Comma) { self.read_token() }
+                }
+
+                Ok(Box::new(TableExpression::new(values)))
+            },
 
             _ => {
                 self.read_token();
@@ -811,7 +830,7 @@ mod tests {
     #[test]
     fn parse_table_expressions() {
         let input = vec![
-            ("days = { \"Sunday\", \"Monday\" }", "days = { \"Sunday\", \"Monday\" }"),
+            ("days = { \"Sunday\", \"Monday\" }", "days = { [\"\\\"Sunday\\\"\", \"\\\"Monday\\\"\"] }"),
         ];
 
         test_statements(input);

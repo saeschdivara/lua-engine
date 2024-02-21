@@ -85,6 +85,29 @@ impl Debug for StringExpression {
 }
 
 #[derive(SmartExpression)]
+pub struct TableExpression {
+    pub values: Vec<Box<dyn Expression>>
+}
+
+impl TableExpression {
+    pub fn new(values: Vec<Box<dyn Expression>>) -> Self {
+        return Self { values }
+    }
+}
+
+impl Debug for TableExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {:?} {}",
+            "{",
+            self.values.iter().map(|expr| { expr.to_string() }).collect::<Vec<_>>(),
+            "}"
+        )
+    }
+}
+
+#[derive(SmartExpression)]
 pub struct PrefixExpression {
     pub operator: TokenType,
     pub value: Box<dyn Expression>,
