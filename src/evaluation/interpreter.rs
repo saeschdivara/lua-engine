@@ -44,6 +44,13 @@ impl Interpreter {
         };
 
         let mut callstack = Callstack { variables: vec![HashMap::new()], return_triggered: false };
+
+        let my_print = |args: &Vec<Value>| -> EvalResult {
+            args.iter().for_each(|v| {print!("{:?}", v);});
+            Ok(Value::Nil)
+        };
+        callstack.variables.first_mut().unwrap().insert("print".to_string(), Function(FunctionType::Native(my_print)));
+
         match self.eval_all_statements(&statements, &mut callstack) {
             Ok(_) => {}
             Err(err) => {

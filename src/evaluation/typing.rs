@@ -17,19 +17,19 @@ pub type EvalResult = Result<Value, EvalError>;
 pub type EvalStatementResult = Result<(), EvalError>;
 pub type NativeFunc = fn(args: &Vec<Value>) -> EvalResult;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NumberType {
     Int(i64),
     Float(f64)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum FunctionType {
     Native(NativeFunc),
     Expression(Rc<FunctionExpression>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Nil,
     Boolean(bool),
