@@ -47,6 +47,7 @@ impl Interpreter {
 
         let my_print = |args: &Vec<Value>| -> EvalResult {
             args.iter().for_each(|v| {print!("{:?}", v);});
+            println!();
             Ok(Value::Nil)
         };
         callstack.variables.first_mut().unwrap().insert("print".to_string(), Function(FunctionType::Native(my_print)));
@@ -372,10 +373,46 @@ impl Interpreter {
                 return Ok(Value::Boolean(left.is_equals(&right)))
             }
             TokenType::TildeEqual => {}
-            TokenType::LowerEqual => {}
-            TokenType::GreaterEqual => {}
-            TokenType::Lower => {}
-            TokenType::Greater => {}
+            TokenType::LowerEqual => {
+                if !left.is_number() || !right.is_number() {
+                    return Err(EvalError::new("Wrong type used for < operator".to_string()));
+                }
+
+                return Ok(self.eval_operation_on_int(
+                    &left, &right,
+                    |l, r| { Value::Boolean(l <= r) })
+                );
+            }
+            TokenType::GreaterEqual => {
+                if !left.is_number() || !right.is_number() {
+                    return Err(EvalError::new("Wrong type used for < operator".to_string()));
+                }
+
+                return Ok(self.eval_operation_on_int(
+                    &left, &right,
+                    |l, r| { Value::Boolean(l >= r) })
+                );
+            }
+            TokenType::Lower => {
+                if !left.is_number() || !right.is_number() {
+                    return Err(EvalError::new("Wrong type used for < operator".to_string()));
+                }
+
+                return Ok(self.eval_operation_on_int(
+                    &left, &right,
+                    |l, r| { Value::Boolean(l < r) })
+                );
+            }
+            TokenType::Greater => {
+                if !left.is_number() || !right.is_number() {
+                    return Err(EvalError::new("Wrong type used for < operator".to_string()));
+                }
+
+                return Ok(self.eval_operation_on_int(
+                    &left, &right,
+                    |l, r| { Value::Boolean(l > r) })
+                );
+            }
             TokenType::Dot => {}
             TokenType::DoubleDot => {}
             TokenType::TripleDot => {}
