@@ -273,10 +273,6 @@ impl Lexer {
     fn read_string(&mut self) -> String {
         let mut string_val = String::new();
 
-        if let Some(ch) = self.ch {
-            string_val.push(ch);
-        }
-
         while let Some(ch) = self.peek_char() {
             if ch == '"' { break }
 

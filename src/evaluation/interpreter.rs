@@ -298,6 +298,8 @@ impl Interpreter {
             } else {
                 Err(EvalError::new(format!("Could not find variable: {}", &ident_expr.identifier)))
             }
+        } else if let Some(expr) = expr.as_any().downcast_ref::<StringExpression>() {
+            Ok(Value::String(expr.value.clone()))
         } else if let Some(expr) = expr.as_any().downcast_ref::<PrefixExpression>() {
             self.eval_prefix_expression(expr)
         } else if let Some(expr) = expr.as_any().downcast_ref::<InfixExpression>() {
@@ -305,7 +307,7 @@ impl Interpreter {
         } else if let Some(expr) = expr.as_any().downcast_ref::<CallExpression>() {
             self.eval_call_expression(expr, callstack)
         } else {
-            Ok(Value::Nil)
+            Err(EvalError::new(format!("Unknown expression: {}", expr.to_string())))
         }
     }
 
