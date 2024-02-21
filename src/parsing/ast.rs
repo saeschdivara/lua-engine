@@ -215,7 +215,8 @@ impl Debug for AssignmentStatement {
 }
 
 pub enum LoopType {
-    While
+    While,
+    Repeat,
 }
 
 #[derive(SmartStatement)]
@@ -226,17 +227,6 @@ pub struct LoopStatement {
 }
 
 impl LoopStatement {
-    pub fn new(
-        condition: Box<dyn Expression>,
-        block: Vec<Box<dyn Statement>>,
-        loop_type: LoopType) -> Self {
-        return Self {
-            condition,
-            block,
-            loop_type,
-        };
-    }
-
     pub fn while_loop(
         condition: Box<dyn Expression>,
         block: Vec<Box<dyn Statement>>) -> Self {
@@ -244,6 +234,16 @@ impl LoopStatement {
             condition,
             block,
             loop_type: LoopType::While,
+        };
+    }
+
+    pub fn repeat_loop(
+        condition: Box<dyn Expression>,
+        block: Vec<Box<dyn Statement>>) -> Self {
+        return Self {
+            condition,
+            block,
+            loop_type: LoopType::Repeat,
         };
     }
 }
@@ -257,6 +257,14 @@ impl Debug for LoopStatement {
                     "while {} do {:?} end",
                     self.condition.to_string(),
                     self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>()
+                )
+            }
+            LoopType::Repeat => {
+                write!(
+                    f,
+                    "repeat {:?} until {}",
+                    self.block.iter().map(|stmt| { stmt.to_string() }).collect::<Vec<_>>(),
+                    self.condition.to_string(),
                 )
             }
         }

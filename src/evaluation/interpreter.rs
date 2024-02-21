@@ -236,6 +236,26 @@ impl Interpreter {
                     }
                 }
             },
+            LoopType::Repeat => {
+                loop {
+                    match self.eval_all_statements(&stmt.block, callstack) {
+                        Ok(_) => {}
+                        Err(err) => return Err(err)
+                    }
+
+                    match self.eval_expression(&stmt.condition, callstack) {
+                        Ok(condition) => {
+                            if !condition.is_boolean() { return Err(EvalError::new(format!("While condition evaluates to non-bool value: {:?}", condition))) }
+
+                            let Value::Boolean(condition) = condition else { todo!() };
+                            if condition {
+                                break
+                            }
+                        }
+                        Err(err) => return Err(err)
+                    }
+                }
+            },
         }
 
         return Ok(Value::Nil);

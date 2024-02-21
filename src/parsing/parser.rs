@@ -96,6 +96,7 @@ impl Parser {
             TokenType::Return       => self.parse_return(),
             TokenType::If           => self.parse_if(),
             TokenType::While        => self.parse_while_loop(),
+            TokenType::Repeat        => self.parse_repeat_loop(),
             TokenType::Function     => self.parse_function(),
             TokenType::Identifier   => {
                 match self.next_token.token_type {
@@ -180,6 +181,24 @@ impl Parser {
         };
 
         return Ok(Box::new(LoopStatement::while_loop(condition, block.statements)));
+    }
+
+    fn parse_repeat_loop(&mut self) -> StatementParsingResult {
+        let body_result = self.parse_program(vec![
+            TokenType::Until,
+        ]);
+
+        let block = match body_result {
+            Ok(body) => body,
+            Err(err) => return Err(err),
+        };
+
+        let condition = match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => expr,
+            Err(err) => return Err(err)
+        };
+
+        return Ok(Box::new(LoopStatement::repeat_loop(condition, block.statements)));
     }
 
     fn parse_if(&mut self) -> StatementParsingResult {
