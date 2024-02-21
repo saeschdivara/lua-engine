@@ -79,4 +79,20 @@ impl Value {
 
         return false
     }
+
+    pub fn plus(&self, val: &Value) -> Value {
+        if self.is_nil() && val.is_nil() { Value::Nil }
+        else if self.is_boolean() || val.is_boolean() {
+            Value::Nil
+        }
+        else if self.is_number() && val.is_number() {
+            if let Value::Number(NumberType::Int(l)) = self && let Value::Number(NumberType::Int(r)) = val{
+                Value::Number(NumberType::Int(l + r))
+            } else {
+                Value::Nil
+            }
+        } else {
+            Value::Nil
+        }
+    }
 }

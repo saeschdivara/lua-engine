@@ -15,6 +15,12 @@ pub struct Callstack {
     pub return_triggered: bool
 }
 
+impl Callstack {
+    pub fn add_new_layer(&mut self) {
+        self.variables.push(HashMap::new());
+    }
+}
+
 pub struct Interpreter {
     return_value: Option<Value>,
 }
@@ -101,6 +107,7 @@ impl Interpreter {
         } else if let Some(return_stmt) = stmt.as_any().downcast_ref::<ReturnStatement>() {
             match self.eval_return_statement(return_stmt, callstack) {
                 Ok(val) => {
+                    callstack.return_triggered = true;
                     self.return_value = Some(val);
                     Ok(())
                 }
@@ -120,6 +127,13 @@ impl Interpreter {
                 Ok(_) => Ok(()),
                 Err(err) => {
                     Err(EvalError::new(format!("Failed loop statement: {}", err.message)))
+                }
+            }
+        } else if let Some(stmt) = stmt.as_any().downcast_ref::<ForStatement>() {
+            match self.eval_for_statement(stmt, callstack) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    Err(EvalError::new(format!("Failed for statement: {}", err.message)))
                 }
             }
         }
@@ -151,6 +165,7 @@ impl Interpreter {
         if self.return_value.is_none() { return Ok(Value::Nil) }
         let return_value = (&<Option<Value> as Clone>::clone(&self.return_value).unwrap()).clone();
         self.return_value = None;
+        callstack.return_triggered = false;
 
         return Ok(return_value)
     }
@@ -225,7 +240,9 @@ impl Interpreter {
                             let Value::Boolean(condition) = condition else { todo!() };
                             if condition {
                                 match self.eval_all_statements(&stmt.block, callstack) {
-                                    Ok(_) => {}
+                                    Ok(_) => {
+                                        if callstack.return_triggered { break }
+                                    }
                                     Err(err) => return Err(err)
                                 }
                             } else {
@@ -239,7 +256,9 @@ impl Interpreter {
             LoopType::Repeat => {
                 loop {
                     match self.eval_all_statements(&stmt.block, callstack) {
-                        Ok(_) => {}
+                        Ok(_) => {
+                            if callstack.return_triggered { break }
+                        }
                         Err(err) => return Err(err)
                     }
 
@@ -257,6 +276,55 @@ impl Interpreter {
                 }
             },
         }
+
+        return Ok(Value::Nil);
+    }
+
+    fn eval_for_statement(&mut self, stmt: &ForStatement, callstack: &mut Callstack) -> EvalResult {
+        callstack.add_new_layer();
+
+        let variable_name = stmt.initial_variable
+            .as_any()
+            .downcast_ref::<AssignmentStatement>()
+            .unwrap().variable.literal
+            .clone();
+
+        match self.eval_statement(&stmt.initial_variable, callstack) {
+            Ok(_) => {},
+            Err(err) => return Err(err)
+        }
+
+        let value_to_stop = match self.eval_expression(&stmt.end_value, callstack) {
+            Ok(val) => { val }
+            Err(err) => { return Err(err) }
+        };
+
+        if !value_to_stop.is_number() { return Err(EvalError::new(format!("For loop stop value is not a number: {:?}", value_to_stop))) }
+
+        let increment_value = match self.eval_expression(&stmt.increment_value, callstack) {
+            Ok(val) => { val }
+            Err(err) => { return Err(err) }
+        };
+
+        if !increment_value.is_number() { return Err(EvalError::new(format!("For loop increment value is not a number: {:?}", increment_value))) }
+
+        loop {
+            let current_counter_val = self.get_variable_value(&variable_name, callstack).unwrap();
+            if current_counter_val.is_equals(&value_to_stop) { break }
+
+            match self.eval_all_statements(&stmt.block, callstack) {
+                Ok(_) => {
+                    if callstack.return_triggered { break }
+                }
+                Err(err) => { return Err(err) }
+            }
+
+            let current_counter_val = self.get_variable_value(&variable_name, callstack).unwrap();
+            let new_counter_val = current_counter_val.plus(&increment_value);
+            callstack.variables.last_mut().unwrap().insert(variable_name.clone(), new_counter_val);
+        }
+
+        callstack.variables.pop();
 
         return Ok(Value::Nil);
     }
