@@ -19,7 +19,7 @@ impl EvalError {
 }
 
 type EvalResult = Result<Value, EvalError>;
-type EvalBoolResult = Result<bool, EvalError>;
+type EvalStatementResult = Result<(), EvalError>;
 
 pub struct Scope {
     pub variables: HashMap<String, Value>,
@@ -27,6 +27,7 @@ pub struct Scope {
 
 pub struct Callstack {
     pub variables: Vec<HashMap<String, Value>>,
+    pub return_triggered: bool
 }
 
 pub struct Interpreter {
@@ -57,44 +58,66 @@ impl Interpreter {
             }
         };
 
-        let mut call_stack = Callstack { variables: vec![HashMap::new()] };
-
-        for statement in statements {
-            self.eval_statement(&statement, &mut call_stack);
+        let mut callstack = Callstack { variables: vec![HashMap::new()], return_triggered: false };
+        match self.eval_all_statements(&statements, &mut callstack) {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("Failed eval: {}", err.message)
+            }
         }
     }
 
-    fn eval_statement(&mut self, stmt: &Box<dyn Statement>, callstack: &mut Callstack) {
+    fn eval_all_statements(&mut self, statements: &Vec<Box<dyn Statement>>, callstack: &mut Callstack) -> EvalStatementResult {
+        for statement in statements {
+            match self.eval_statement(statement, callstack) {
+                Ok(_) => {}
+                Err(err) => return Err(err)
+            }
+
+            if statement.as_any().is::<ReturnStatement>() {
+                return Ok(());
+            }
+        }
+
+        return Ok(())
+    }
+
+    fn eval_statement(&mut self, stmt: &Box<dyn Statement>, callstack: &mut Callstack) -> EvalStatementResult {
         if let Some(func) = stmt.as_any().downcast_ref::<FunctionStatement>() {
             let function = func.function.clone();
             callstack.variables.last_mut().unwrap().insert(func.name.clone(), Function(function));
+            Ok(())
         } else if let Some(call) = stmt.as_any().downcast_ref::<FunctionCallStatement>() {
             if let Some(call_expr) = call.call.as_any().downcast_ref::<CallExpression>() {
                 match self.eval_call_expression(call_expr, callstack) {
-                    Ok(_) => {}
+                    Ok(_) => Ok(()),
                     Err(err) => {
-                        eprintln!("Failed function call statement: {}", err.message)
+                        Err(EvalError::new(format!("Failed call statement: {}", err.message)))
                     }
                 }
             } else {
-                eprintln!("Failed to get call expr");
+                Err(EvalError::new("Failed to get call expr".to_string()))
             }
         } else if let Some(if_stmt) = stmt.as_any().downcast_ref::<IfStatement>() {
             match self.eval_if_statement(if_stmt, callstack) {
-                Ok(_) => {}
+                Ok(_) => Ok(()),
                 Err(err) => {
-                    eprintln!("Failed if statement: {}", err.message)
+                    Err(EvalError::new(format!("Failed if statement: {}", err.message)))
                 }
             }
         } else if let Some(return_stmt) = stmt.as_any().downcast_ref::<ReturnStatement>() {
             match self.eval_return_statement(return_stmt, callstack) {
                 Ok(val) => {
                     self.return_value = Some(val);
+                    Ok(())
                 }
                 Err(err) => {
-                    eprintln!("Failed return statement: {}", err.message)
+                    Err(EvalError::new(format!("Failed return statement: {}", err.message)))
                 }
             }
+        }
+        else {
+            Err(EvalError::new("Unknown statement type found".to_string()))
         }
     }
 
@@ -113,28 +136,25 @@ impl Interpreter {
         }
 
         callstack.variables.push(new_scope);
-
-        for stmt in &function.block {
-            self.eval_statement(stmt, callstack);
-
-            if stmt.as_any().is::<ReturnStatement>() {
-                if let Some(return_value) = &self.return_value {
-                    return Ok(return_value.clone());
-                }
-
-                return Ok(Value::Nil);
-            }
+        match self.eval_all_statements(&function.block, callstack) {
+            Ok(_) => {}
+            Err(err) => return Err(err)
         }
 
-        return Ok(Value::Nil);
+        if self.return_value.is_none() { return Ok(Value::Nil) }
+        let return_value = (&<Option<Value> as Clone>::clone(&self.return_value).unwrap()).clone();
+        self.return_value = None;
+
+        return Ok(return_value)
     }
 
     fn eval_if_statement(&mut self, stmt: &IfStatement, callstack: &mut Callstack) -> EvalResult {
         let is_true = self.eval_condition(&stmt.condition, callstack);
 
         if is_true {
-            for statement in &stmt.block {
-                self.eval_statement(statement, callstack);
+            match self.eval_all_statements(&stmt.block, callstack) {
+                Ok(_) => {}
+                Err(err) => return Err(err)
             }
         } else {
             let mut elseif_executed = false;
@@ -144,17 +164,20 @@ impl Interpreter {
                     if is_true {
                         elseif_executed = true;
 
-                        for statement in &stmt.block {
-                            self.eval_statement(statement, callstack);
+                        match self.eval_all_statements(&elseif_stmt.block, callstack) {
+                            Ok(_) => {}
+                            Err(err) => return Err(err)
                         }
+
                         break;
                     }
                 }
             }
 
             if !elseif_executed {
-                for statement in &stmt.else_block {
-                    self.eval_statement(&statement, callstack);
+                match self.eval_all_statements(&stmt.else_block, callstack) {
+                    Ok(_) => {}
+                    Err(err) => return Err(err)
                 }
             }
         }
@@ -163,7 +186,10 @@ impl Interpreter {
     }
 
     fn eval_return_statement(&mut self, stmt: &ReturnStatement, callstack: &mut Callstack) -> EvalResult {
-        return self.eval_expression(&stmt.value, callstack);
+        let result = self.eval_expression(&stmt.value, callstack);
+        callstack.variables.pop();
+
+        return result;
     }
 
     fn eval_expression(&mut self, expr: &Box<dyn Expression>, callstack: &mut Callstack) -> EvalResult {
@@ -190,7 +216,7 @@ impl Interpreter {
         match self.eval_expression(&expr.function, callstack) {
             Ok(function_val) => {
                 if let Function(func) = function_val {
-                    return self.eval_function(func, &expr.arguments, callstack)
+                    self.eval_function(func, &expr.arguments, callstack)
                 } else {
                     Err(EvalError::new("Unknown function error".to_string()))
                 }
@@ -227,7 +253,7 @@ impl Interpreter {
             }
             TokenType::Minus => {
                 if !left.is_number() || !right.is_number() {
-                    return Err(EvalError::new("Wrong type used for plus".to_string()));
+                    return Err(EvalError::new("Wrong type used for minus".to_string()));
                 }
 
                 return Ok(self.eval_operation_on_int(
@@ -237,7 +263,7 @@ impl Interpreter {
             }
             TokenType::Star => {
                 if !left.is_number() || !right.is_number() {
-                    return Err(EvalError::new("Wrong type used for plus".to_string()));
+                    return Err(EvalError::new("Wrong type used for star".to_string()));
                 }
 
                 return Ok(self.eval_operation_on_int(
@@ -247,14 +273,25 @@ impl Interpreter {
             }
             TokenType::Slash => {}
             TokenType::Percent => {}
-            TokenType::Caret => {}
+            TokenType::Caret => {
+                if !left.is_number() || !right.is_number() {
+                    return Err(EvalError::new("Wrong type used for caret".to_string()));
+                }
+
+                return Ok(self.eval_operation_on_int(
+                    &left, &right,
+                    |l, r| { Value::Number(NumberType::Int(i64::pow(l, r as u32))) })
+                );
+            }
             TokenType::Hash => {}
             TokenType::Ampersand => {}
             TokenType::Tilde => {}
             TokenType::Bar => {}
             TokenType::ShiftLeft => {}
             TokenType::ShiftRight => {}
-            TokenType::DoubleEquals => {}
+            TokenType::DoubleEquals => {
+                return Ok(Value::Boolean(left.is_equals(&right)))
+            }
             TokenType::TildeEqual => {}
             TokenType::LowerEqual => {}
             TokenType::GreaterEqual => {}
