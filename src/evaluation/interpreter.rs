@@ -363,6 +363,8 @@ impl Interpreter {
     fn eval_expression(&mut self, expr: &Box<dyn Expression>, callstack: &mut Callstack) -> EvalResult {
         if let Some(int_expr) = expr.as_any().downcast_ref::<IntExpression>() {
             Ok(Value::Number(NumberType::Int(int_expr.value)))
+        } else if let Some(expr) = expr.as_any().downcast_ref::<TableExpression>() {
+            self.eval_table_expression(expr, callstack)
         } else if let Some(ident_expr) = expr.as_any().downcast_ref::<IdentifierExpression>() {
             if let Some(val) = self.get_variable_value(&ident_expr.identifier, callstack) {
                 Ok(val.clone())
@@ -380,6 +382,18 @@ impl Interpreter {
         } else {
             Err(EvalError::new(format!("Unknown expression: {}", expr.to_string())))
         }
+    }
+
+    fn eval_table_expression(&mut self, expr: &TableExpression, callstack: &mut Callstack) -> EvalResult {
+        let mut values = vec![];
+        for value_expr in &expr.values {
+            match self.eval_expression(value_expr, callstack) {
+                Ok(value) => { values.push(value) }
+                Err(err) => return Err(err)
+            }
+        }
+
+        Ok(Value::Table(values))
     }
 
     fn eval_call_expression(&mut self, expr: &CallExpression, callstack: &mut Callstack) -> EvalResult {

@@ -39,7 +39,7 @@ pub enum Value {
     Function(FunctionType),
     UserData,
     Thread,
-    Table,
+    Table(Vec<Value>),
 }
 
 impl Value {
