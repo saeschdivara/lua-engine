@@ -78,6 +78,12 @@ impl Parser {
         self.read_token();
 
         while self.current_token.is_not_one(end_token.clone()) {
+
+            if self.current_token.is(TokenType::Comment) {
+                self.read_token();
+                continue
+            }
+
             match self.parse_statement() {
                 Ok(stmt) => {
                     statements.push(stmt);

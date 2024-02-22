@@ -2,6 +2,7 @@
 pub enum TokenType {
     Illegal,
     Eof,
+    Comment,
 
     Identifier,
     Int,
@@ -209,7 +210,21 @@ impl Lexer {
                     else { self.create_token(TokenType::Greater, ch.to_string()) }
 
                 },
-                '-' => self.create_token(TokenType::Minus, ch.to_string()),
+                '-' => {
+                    if let Some(peek_char) = self.peek_char() {
+                        if peek_char == '-' {
+                            while let Some(ch) = self.ch && ch != '\n' {
+                                self.read_char();
+                            }
+
+                            self.create_token(TokenType::Comment, "".to_string())
+                        } else {
+                            self.create_token(TokenType::Minus, ch.to_string())
+                        }
+                    } else {
+                        self.create_token(TokenType::Minus, ch.to_string())
+                    }
+                },
                 '*' => self.create_token(TokenType::Star, ch.to_string()),
                 '(' => self.create_token(TokenType::LeftParen, ch.to_string()),
                 ')' => self.create_token(TokenType::RightParen, ch.to_string()),
@@ -254,10 +269,6 @@ impl Lexer {
         while let Some(ch) = self.ch && ch.is_whitespace() {
             if ch == '\n' {
                 self.line += 1;
-                self.column = 1;
-            }
-            else {
-                self.column += 1;
             }
 
             self.read_char();

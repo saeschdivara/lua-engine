@@ -6,4 +6,5 @@ function fact(n)
     end
 end
 
+-- print out comment
 print(fact(4))
