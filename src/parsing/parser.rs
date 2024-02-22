@@ -1,4 +1,4 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, FunctionWrapperExpression, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression, TableExpression, TablePropertyAssignmentStatement};
+use crate::parsing::ast::{AssignmentExpression, AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, FunctionWrapperExpression, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression, TableExpression, TablePropertyAssignmentStatement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
@@ -495,8 +495,31 @@ impl Parser {
             },
             TokenType::Identifier => {
                 self.read_token();
-                let tok = self.current_token.clone();
-                Ok(Box::new(IdentifierExpression::new(tok.literal)))
+
+                if self.next_token.is(TokenType::Equal) {
+                    self.parse_variable_assignment_expression()
+                } else if self.next_token.is(TokenType::Dot) {
+                    let table_name = self.current_token.literal.clone();
+                    self.read_token();
+
+                    if self.next_token.is_not(TokenType::Identifier) {
+                        Err(self.create_error(format!("Expected identifier after dot access but was {:?}", self.next_token.token_type.clone())))
+                    } else {
+                        self.read_token();
+                        let property_name = self.current_token.literal.clone();
+
+                        let mut table_property_identifier = table_name;
+                        table_property_identifier += ".";
+                        table_property_identifier += property_name.as_str();
+
+                        Ok(Box::new(IdentifierExpression::new(table_property_identifier)))
+                    }
+
+                } else {
+                    let tok = self.current_token.clone();
+                    Ok(Box::new(IdentifierExpression::new(tok.literal)))
+                }
+
             },
             TokenType::String => {
                 self.read_token();
@@ -569,6 +592,21 @@ impl Parser {
         match self.parse_expression(current_precedence) {
             Ok(expr) => { Ok(Box::new(InfixExpression::new(left, operator, expr))) }
             Err(err) => { Err(err) }
+        }
+    }
+
+    fn parse_variable_assignment_expression(&mut self) -> ExpressionParsingResult {
+        let variable_token = self.current_token.clone();
+
+        if self.next_token.is_not(TokenType::Equal) {
+            return Err(self.create_error(format!("Next token is not equals: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => Ok(Box::new(AssignmentExpression::new(variable_token.literal, expr))),
+            Err(err) => Err(err),
         }
     }
 

@@ -108,6 +108,31 @@ impl Debug for TableExpression {
 }
 
 #[derive(SmartExpression)]
+pub struct AssignmentExpression {
+    pub variable: String,
+    pub value: Box<dyn Expression>,
+}
+
+impl AssignmentExpression {
+    pub fn new(variable: String, value: Box<dyn Expression>,) -> Self {
+        return Self {
+            variable,
+            value,
+        }
+    }
+}
+
+impl Debug for AssignmentExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,
+               "{} = {}",
+               self.variable,
+               self.value.to_string()
+        )
+    }
+}
+
+#[derive(SmartExpression)]
 pub struct PrefixExpression {
     pub operator: TokenType,
     pub value: Box<dyn Expression>,

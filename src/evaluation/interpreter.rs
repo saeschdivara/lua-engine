@@ -416,14 +416,25 @@ impl Interpreter {
 
     fn eval_table_expression(&mut self, expr: &TableExpression, callstack: &mut Callstack) -> EvalResult {
         let mut values = vec![];
+        let mut properties = HashMap::new();
+
         for value_expr in &expr.values {
-            match self.eval_expression(value_expr, callstack) {
-                Ok(value) => { values.push(value) }
-                Err(err) => return Err(err)
+            if let Some(assignment) = value_expr.as_any().downcast_ref::<AssignmentExpression>() {
+                match self.eval_expression(&assignment.value, callstack) {
+                    Ok(val) => {
+                        properties.insert(assignment.variable.clone(), val);
+                    }
+                    Err(err) => return Err(err)
+                }
+            } else {
+                match self.eval_expression(value_expr, callstack) {
+                    Ok(value) => { values.push(value) }
+                    Err(err) => return Err(err)
+                }
             }
         }
 
-        Ok(Value::Table(values, HashMap::new()))
+        Ok(Value::Table(values, properties))
     }
 
     fn eval_call_expression(&mut self, expr: &CallExpression, callstack: &mut Callstack) -> EvalResult {
