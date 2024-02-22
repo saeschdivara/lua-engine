@@ -598,11 +598,29 @@ impl Interpreter {
     }
 
     fn get_variable_value<'a>(&'a self, variable: &String, callstack: &'a mut Callstack) -> Option<&Value> {
-        callstack.variables
-            .iter()
-            .rev()
-            .find(|x| {x.contains_key(variable)})
-            .map(move |t| {t.get(variable).unwrap()})
+        if variable.contains(".") {
+            let Some((table_name, property_name)) = variable.split_once(".") else { todo!() };
+            let table = callstack.variables
+                .iter()
+                .rev()
+                .find(|x| {x.contains_key(table_name)})
+                .map(move |t| {t.get(table_name).unwrap()});
+
+            if let Some(table_val) = table {
+                match table_val {
+                    Value::Table(_, properties) => properties.get(property_name),
+                    _ => None
+                }
+            } else {
+                None
+            }
+        } else {
+            callstack.variables
+                .iter()
+                .rev()
+                .find(|x| {x.contains_key(variable)})
+                .map(move |t| {t.get(variable).unwrap()})
+        }
     }
 
     fn get_variable_value_mut<'a>(&'a mut self, variable: &String, callstack: &'a mut Callstack) -> Option<&mut Value> {
