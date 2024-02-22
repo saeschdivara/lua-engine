@@ -16,8 +16,10 @@ impl EvalError {
 }
 
 pub type EvalResult = Result<Value, EvalError>;
+pub type EvalListResult = Result<Vec<Value>, EvalError>;
 pub type EvalStatementResult = Result<(), EvalError>;
 pub type NativeFunc = fn(args: &Vec<Value>) -> EvalResult;
+pub type NativeMutableFunc = fn(args: &mut Vec<Value>) -> EvalResult;
 
 #[derive(Clone, Debug)]
 pub enum NumberType {
@@ -28,7 +30,21 @@ pub enum NumberType {
 #[derive(Clone, Debug)]
 pub enum FunctionType {
     Native(NativeFunc),
+    NativeMutable(NativeMutableFunc),
     Expression(Rc<FunctionExpression>),
+}
+
+#[derive(Clone, Debug)]
+pub struct MetaTable {
+    pub value: Option<Box<Value>>
+}
+
+impl MetaTable {
+    pub fn empty() -> Self {
+        return Self {
+            value: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -40,7 +56,7 @@ pub enum Value {
     Function(FunctionType),
     UserData,
     Thread,
-    Table(Vec<Value>, HashMap<String, Value>),
+    Table(Vec<Value>, HashMap<String, Value>, MetaTable),
 }
 
 impl Value {

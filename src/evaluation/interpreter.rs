@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::evaluation::standard_lib::add_standard_functions;
 
 use crate::evaluation::typing::*;
 use crate::evaluation::typing::Value::Function;
@@ -51,13 +52,7 @@ impl Interpreter {
         };
 
         let mut callstack = Callstack { variables: vec![HashMap::new()], return_triggered: false };
-
-        let my_print = |args: &Vec<Value>| -> EvalResult {
-            args.iter().for_each(|v| {print!("{:?} ", v);});
-            println!();
-            Ok(Value::Nil)
-        };
-        callstack.variables.first_mut().unwrap().insert("print".to_string(), Function(FunctionType::Native(my_print)));
+        add_standard_functions(&mut callstack);
 
         match self.eval_all_statements(&statements, &mut callstack) {
             Ok(_) => {}
@@ -150,18 +145,13 @@ impl Interpreter {
         }
     }
 
-    fn eval_function(&mut self, function: Rc<FunctionExpression>, arguments: &Vec<Box<dyn Expression>>, callstack: &mut Callstack) -> EvalResult {
+    fn eval_function(&mut self, function: &Rc<FunctionExpression>, arguments: &Vec<Value>, callstack: &mut Callstack) -> EvalResult {
         let mut new_scope = HashMap::new();
         for i in 0..function.parameters.len() {
             let parameter = &function.parameters[i];
-            let argument = &arguments[i];
+            let val = &arguments[i];
 
-            match self.eval_expression(argument, callstack) {
-                Ok(val) => {
-                    new_scope.insert(parameter.clone(), val);
-                }
-                Err(err) => return Err(err)
-            }
+            new_scope.insert(parameter.clone(), val.clone());
         }
 
         callstack.variables.push(new_scope);
@@ -178,19 +168,27 @@ impl Interpreter {
         return Ok(return_value)
     }
 
-    fn eval_native_function(&mut self, function: NativeFunc, arguments: &Vec<Box<dyn Expression>>, callstack: &mut Callstack) -> EvalResult {
-        let mut evaluated_args = vec![];
+    fn eval_native_function(&mut self, function: &NativeFunc, arguments: &Vec<Value>) -> EvalResult {
+        return function(arguments)
+    }
+
+    fn eval_native_mutable_function(&mut self, function: &NativeMutableFunc, arguments: &mut Vec<Value>) -> EvalResult {
+        return function(arguments)
+    }
+
+    fn eval_expressions(&mut self, arguments: &Vec<Box<dyn Expression>>, callstack: &mut Callstack) -> EvalListResult {
+        let mut evaluated_values = vec![];
 
         for argument in arguments {
             match self.eval_expression(argument, callstack) {
                 Ok(val) => {
-                    evaluated_args.push(val);
+                    evaluated_values.push(val);
                 }
                 Err(err) => return Err(err)
             }
         }
 
-        return function(&evaluated_args)
+        return Ok(evaluated_values)
     }
 
     fn eval_if_statement(&mut self, stmt: &IfStatement, callstack: &mut Callstack) -> EvalResult {
@@ -376,7 +374,7 @@ impl Interpreter {
                     Some(val) => val
                 };
 
-                if let Value::Table(_, properties) = table_val {
+                if let Value::Table(_, properties, _) = table_val {
                     properties.insert(stmt.property_name.clone(), val);
                     Ok(Value::Nil)
                 } else {
@@ -434,16 +432,22 @@ impl Interpreter {
             }
         }
 
-        Ok(Value::Table(values, properties))
+        Ok(Value::Table(values, properties, MetaTable::empty()))
     }
 
     fn eval_call_expression(&mut self, expr: &CallExpression, callstack: &mut Callstack) -> EvalResult {
         match self.eval_expression(&expr.function, callstack) {
             Ok(function_val) => {
                 if let Function(func_type) = function_val {
+                    let mut arguments = match self.eval_expressions(&expr.arguments, callstack) {
+                        Ok(args) => args,
+                        Err(err) => return Err(err)
+                    };
+
                     match func_type {
-                        FunctionType::Native(func) => self.eval_native_function(func, &expr.arguments, callstack),
-                        FunctionType::Expression(func) => self.eval_function(func, &expr.arguments, callstack),
+                        FunctionType::Native(func) => self.eval_native_function(&func, &arguments),
+                        FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments),
+                        FunctionType::Expression(func) => self.eval_function(&func, &arguments, callstack),
                     }
                 } else {
                     Err(EvalError::new("Unknown function error".to_string()))
@@ -483,14 +487,29 @@ impl Interpreter {
 
         match expr.operator {
             TokenType::Plus => {
-                if !left.is_number() || !right.is_number() {
-                    return Err(EvalError::new("Wrong type used for plus".to_string()));
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l + r)) })
+                    );
                 }
 
-                return Ok(self.eval_operation_on_int(
-                    &left, &right,
-                    |l, r| { Value::Number(NumberType::Int(l + r)) })
-                );
+                let mut arguments = vec![left.clone(), right];
+                
+                match left {
+                    Value::Table(_, _, MetaTable{ value: Some(ref meta_table) }) => {
+                        let box Value::Table(_, properties, _) = meta_table else { todo!() };
+                        if let Some(Function(plus_func)) = properties.get("__add") {
+
+                            return match plus_func {
+                                FunctionType::Native(func) => self.eval_native_function(func, &arguments),
+                                FunctionType::NativeMutable(func) => self.eval_native_mutable_function(func, &mut arguments),
+                                FunctionType::Expression(func) => self.eval_function(func, &arguments, callstack),
+                            }
+                        }
+                    },
+                    _ => return Err(EvalError::new("Wrong type used for plus".to_string()))
+                }
             }
             TokenType::Minus => {
                 if !left.is_number() || !right.is_number() {
@@ -619,7 +638,7 @@ impl Interpreter {
 
             if let Some(table_val) = table {
                 match table_val {
-                    Value::Table(_, properties) => properties.get(property_name),
+                    Value::Table(_, properties, _) => properties.get(property_name),
                     _ => None
                 }
             } else {
