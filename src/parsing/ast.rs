@@ -186,6 +186,25 @@ impl Debug for FunctionExpression {
 }
 
 #[derive(SmartExpression)]
+pub struct FunctionWrapperExpression {
+    pub func: Rc<FunctionExpression>
+}
+
+impl FunctionWrapperExpression {
+    pub fn new(func: FunctionExpression) -> Self {
+        return Self {
+            func: Rc::new(func),
+        }
+    }
+}
+
+impl Debug for FunctionWrapperExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.func.to_string())
+    }
+}
+
+#[derive(SmartExpression)]
 pub struct CallExpression {
     pub function: Box<dyn Expression>,
     pub arguments: Vec<Box<dyn Expression>>,
@@ -478,10 +497,10 @@ impl Debug for FunctionStatement {
 }
 
 impl FunctionStatement {
-    pub fn new(name: String, function: FunctionExpression) -> Self {
+    pub fn new(name: String, function: Rc<FunctionExpression>) -> Self {
         return Self {
             name,
-            function: Rc::new(function),
+            function,
         };
     }
 }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::parsing::ast::FunctionExpression;
@@ -39,7 +40,7 @@ pub enum Value {
     Function(FunctionType),
     UserData,
     Thread,
-    Table(Vec<Value>),
+    Table(Vec<Value>, HashMap<String, Value>),
 }
 
 impl Value {

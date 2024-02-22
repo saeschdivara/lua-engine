@@ -123,6 +123,13 @@ impl Interpreter {
                     Err(EvalError::new(format!("Failed assignment statement: {}", err.message)))
                 }
             }
+        } else if let Some(stmt) = stmt.as_any().downcast_ref::<TablePropertyAssignmentStatement>() {
+            match self.eval_property_assignment_statement(stmt, callstack) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    Err(EvalError::new(format!("Failed property assignment statement: {}", err.message)))
+                }
+            }
         } else if let Some(stmt) = stmt.as_any().downcast_ref::<LoopStatement>() {
             match self.eval_loop_statement(stmt, callstack) {
                 Ok(_) => Ok(()),
@@ -360,11 +367,34 @@ impl Interpreter {
         return Ok(Value::Nil);
     }
 
+    fn eval_property_assignment_statement(&mut self, stmt: &TablePropertyAssignmentStatement, callstack: &mut Callstack) -> EvalResult {
+
+        match self.eval_expression(&stmt.value, callstack) {
+            Ok(val) => {
+                let table_val = match self.get_variable_value_mut(&stmt.table_variable, callstack) {
+                    None => return Err(EvalError::new(format!("Could not find variable: {}", &stmt.table_variable))),
+                    Some(val) => val
+                };
+
+                if let Value::Table(_, properties) = table_val {
+                    properties.insert(stmt.property_name.clone(), val);
+                    Ok(Value::Nil)
+                } else {
+                    return Err(EvalError::new(format!("Variable {} is not a table", &stmt.table_variable)))
+                }
+            },
+            Err(err) => return Err(err)
+        }
+
+    }
+
     fn eval_expression(&mut self, expr: &Box<dyn Expression>, callstack: &mut Callstack) -> EvalResult {
         if let Some(int_expr) = expr.as_any().downcast_ref::<IntExpression>() {
             Ok(Value::Number(NumberType::Int(int_expr.value)))
         } else if let Some(expr) = expr.as_any().downcast_ref::<TableExpression>() {
             self.eval_table_expression(expr, callstack)
+        } else if let Some(expr) = expr.as_any().downcast_ref::<FunctionWrapperExpression>() {
+            Ok(Function(FunctionType::Expression(expr.func.clone())))
         } else if let Some(ident_expr) = expr.as_any().downcast_ref::<IdentifierExpression>() {
             if let Some(val) = self.get_variable_value(&ident_expr.identifier, callstack) {
                 Ok(val.clone())
@@ -393,7 +423,7 @@ impl Interpreter {
             }
         }
 
-        Ok(Value::Table(values))
+        Ok(Value::Table(values, HashMap::new()))
     }
 
     fn eval_call_expression(&mut self, expr: &CallExpression, callstack: &mut Callstack) -> EvalResult {
@@ -573,5 +603,13 @@ impl Interpreter {
             .rev()
             .find(|x| {x.contains_key(variable)})
             .map(move |t| {t.get(variable).unwrap()})
+    }
+
+    fn get_variable_value_mut<'a>(&'a mut self, variable: &String, callstack: &'a mut Callstack) -> Option<&mut Value> {
+        callstack.variables
+            .iter_mut()
+            .rev()
+            .find(|x| {x.contains_key(variable)})
+            .map(move |t| {t.get_mut(variable).unwrap()})
     }
 }

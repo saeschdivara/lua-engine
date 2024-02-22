@@ -1,10 +1,10 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression, TableExpression, TablePropertyAssignmentStatement};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, FunctionWrapperExpression, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression, TableExpression, TablePropertyAssignmentStatement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
 type StatementParsingResult = Result<Box<dyn Statement>, ParsingError>;
 type ExpressionParsingResult = Result<Box<dyn Expression>, ParsingError>;
-type FunctionParsingResult = Result<FunctionExpression, ParsingError>;
+type FunctionParsingResult = Result<FunctionWrapperExpression, ParsingError>;
 
 pub struct Parser {
     lexer: Lexer,
@@ -107,9 +107,7 @@ impl Parser {
                 match self.next_token.token_type {
                     TokenType::LeftParen => self.parse_function_call_statement(),
                     TokenType::Equal => self.parse_variable_assignment(),
-                    TokenType::Dot => {
-                        self.parse_table_property_usages()
-                    },
+                    TokenType::Dot => self.parse_table_property_usages(),
                     _ => Err(self.create_error(format!("Unknown token_type found after identifier: {:?}", self.next_token.token_type)))
                 }
             },
@@ -407,7 +405,7 @@ impl Parser {
 
         match self.parse_function_expression() {
             Ok(function) => {
-                Ok(Box::new(FunctionStatement::new(function_name, function)))
+                Ok(Box::new(FunctionStatement::new(function_name, function.func)))
             }
             Err(err) => Err(err)
         }
@@ -443,7 +441,7 @@ impl Parser {
 
         match body_result {
             Ok(body) => {
-                Ok(FunctionExpression::new(parameters, body.statements))
+                Ok(FunctionWrapperExpression::new(FunctionExpression::new(parameters, body.statements)))
             },
             Err(err) => Err(err),
         }
