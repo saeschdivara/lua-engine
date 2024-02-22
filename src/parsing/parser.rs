@@ -550,7 +550,7 @@ impl Parser {
             message,
             file_path: "".to_string(),
             line: self.current_token.line,
-            column: self.current_token.column,
+            column: self.current_token.column-3,
         }
     }
 }
@@ -828,9 +828,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_table_expressions() {
+    fn parse_table_statements() {
         let input = vec![
             ("days = { \"Sunday\", \"Monday\" }", "days = { [\"\\\"Sunday\\\"\", \"\\\"Monday\\\"\"] }"),
+            ("days = {}", "days = { [] }"),
         ];
 
         test_statements(input);
