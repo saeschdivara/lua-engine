@@ -1,9 +1,10 @@
-use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression, TableExpression};
+use crate::parsing::ast::{AssignmentStatement, CallExpression, ElseIfStatement, Expression, ForStatement, FunctionCallStatement, FunctionExpression, FunctionStatement, get_operator_precedence, IdentifierExpression, IfStatement, InfixExpression, INITIAL_PRECEDENCE, IntExpression, LoopStatement, PREFIX_PRECEDENCE, PrefixExpression, Program, ReturnStatement, Statement, StringExpression, TableExpression, TablePropertyAssignmentStatement};
 use crate::parsing::lexer::{Lexer, Token, TokenType};
 
 type ProgramParsingResult = Result<Program, ParsingError>;
 type StatementParsingResult = Result<Box<dyn Statement>, ParsingError>;
 type ExpressionParsingResult = Result<Box<dyn Expression>, ParsingError>;
+type FunctionParsingResult = Result<FunctionExpression, ParsingError>;
 
 pub struct Parser {
     lexer: Lexer,
@@ -33,6 +34,7 @@ impl Parser {
                 TokenType::Int,
                 TokenType::Identifier,
                 TokenType::String,
+                TokenType::Function,
                 TokenType::Minus,
                 TokenType::Tilde,
                 TokenType::LeftParen,
@@ -105,6 +107,9 @@ impl Parser {
                 match self.next_token.token_type {
                     TokenType::LeftParen => self.parse_function_call_statement(),
                     TokenType::Equal => self.parse_variable_assignment(),
+                    TokenType::Dot => {
+                        self.parse_table_property_usages()
+                    },
                     _ => Err(self.create_error(format!("Unknown token_type found after identifier: {:?}", self.next_token.token_type)))
                 }
             },
@@ -144,6 +149,62 @@ impl Parser {
 
         match self.parse_expression(INITIAL_PRECEDENCE) {
             Ok(expr) => Ok(Box::new(AssignmentStatement::reassignment(variable_token, expr))),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn parse_table_property_usages(&mut self) -> StatementParsingResult {
+        let table_token = self.current_token.clone();
+
+        if self.next_token.is_not(TokenType::Dot) {
+            return Err(self.create_error(format!("Next token is not .: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        if self.next_token.is_not(TokenType::Identifier) {
+            return Err(self.create_error(format!("Next token is not identifier after .: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        let property_token = self.current_token.clone();
+
+        match self.next_token.token_type {
+            TokenType::Equal => self.parse_table_property_assignment(table_token, property_token),
+            TokenType::LeftParen => self.parse_table_property_call(table_token, property_token),
+            _ => Err(self.create_error(format!("Unsupported token after property access token: {:?}", self.next_token)))
+        }
+    }
+
+    fn parse_table_property_assignment(&mut self, table_token: Token, property_token: Token) -> StatementParsingResult {
+        if self.next_token.is_not(TokenType::Equal) {
+            return Err(self.create_error(format!("Next token is not = for property assignment: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        match self.parse_expression(INITIAL_PRECEDENCE) {
+            Ok(expr) => Ok(Box::new(TablePropertyAssignmentStatement::new(table_token.literal, property_token.literal, expr))),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn parse_table_property_call(&mut self, table_token: Token, property_token: Token) -> StatementParsingResult {
+        if self.next_token.is_not(TokenType::LeftParen) {
+            return Err(self.create_error(format!("Next token is not ( for property call: {:?}", self.next_token)))
+        }
+
+        self.read_token();
+
+        let mut table_property_identifier = table_token.literal;
+        table_property_identifier += ".";
+        table_property_identifier += property_token.literal.as_str();
+
+        let identifier = Box::new(IdentifierExpression::new(table_property_identifier));
+
+        match self.parse_function_call(identifier) {
+            Ok(call) => Ok(Box::new(FunctionCallStatement::new(call))),
             Err(err) => Err(err),
         }
     }
@@ -344,6 +405,15 @@ impl Parser {
 
         let function_name = self.current_token.literal.clone();
 
+        match self.parse_function_expression() {
+            Ok(function) => {
+                Ok(Box::new(FunctionStatement::new(function_name, function)))
+            }
+            Err(err) => Err(err)
+        }
+    }
+
+    fn parse_function_expression(&mut self) -> FunctionParsingResult {
         if self.next_token.is_not(TokenType::LeftParen) {
             return Err(self.create_error(format!("Next token is not (: {:?}", self.next_token)))
         }
@@ -373,8 +443,7 @@ impl Parser {
 
         match body_result {
             Ok(body) => {
-                let function = FunctionExpression::new(parameters, body.statements);
-                Ok(Box::new(FunctionStatement::new(function_name, function)))
+                Ok(FunctionExpression::new(parameters, body.statements))
             },
             Err(err) => Err(err),
         }
@@ -442,6 +511,14 @@ impl Parser {
                     expr
                 }
             },
+            TokenType::Function => {
+                self.read_token();
+
+                match self.parse_function_expression() {
+                    Ok(func) => Ok(Box::new(func)),
+                    Err(err) => Err(err)
+                }
+            },
             TokenType::LeftBrace => {
                 self.read_token();
                 let mut values = vec![];
@@ -457,6 +534,8 @@ impl Parser {
 
                     if self.next_token.is(TokenType::Comma) { self.read_token() }
                 }
+
+                self.read_token();
 
                 Ok(Box::new(TableExpression::new(values)))
             },
@@ -550,7 +629,7 @@ impl Parser {
             message,
             file_path: "".to_string(),
             line: self.current_token.line,
-            column: self.current_token.column-3,
+            column: self.current_token.column,
         }
     }
 }
@@ -566,15 +645,16 @@ mod tests {
     fn parse_simple_assignment_statements() {
         let input = r#"
             local n = 1
-            local x = 2
+            local x = {}
+            local y = 2
         "#;
 
-        let expected_identifiers = vec!["n", "x"];
+        let expected_identifiers = vec!["n", "x", "y"];
         let mut parser = Parser::new(input.to_string());
         let output_program = parser.parse_program(vec![TokenType::Eof]).unwrap();
         let statements = output_program.statements;
 
-        assert_eq!(statements.len(), 2);
+        assert_eq!(statements.len(), 3);
 
         for i in 0..expected_identifiers.len() {
             let expected_ident = expected_identifiers[i];

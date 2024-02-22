@@ -254,6 +254,29 @@ impl Debug for AssignmentStatement {
     }
 }
 
+#[derive(SmartStatement)]
+pub struct TablePropertyAssignmentStatement {
+    pub table_variable: String,
+    pub property_name: String,
+    pub value: Box<dyn Expression>,
+}
+
+impl TablePropertyAssignmentStatement {
+    pub fn new(table_variable: String, property_name: String, value: Box<dyn Expression>) -> Self {
+        return Self {
+            table_variable,
+            property_name,
+            value,
+        };
+    }
+}
+
+impl Debug for TablePropertyAssignmentStatement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+       write!(f, "{}.{} = {}", self.table_variable, self.property_name, self.value.to_string())
+    }
+}
+
 pub enum LoopType {
     While,
     Repeat,
