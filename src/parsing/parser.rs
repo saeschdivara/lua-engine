@@ -434,7 +434,7 @@ impl Parser {
 
             parameters.push(self.current_token.literal.clone());
 
-            if self.current_token.is(TokenType::Comma) {
+            if self.next_token.is(TokenType::Comma) {
                 self.read_token();
             }
         }
@@ -811,7 +811,7 @@ mod tests {
     #[test]
     fn parse_simple_function_statement() {
         let input = r#"
-            function fact(n)
+            function fact(n1,n2)
                 return 1
             end
         "#;
@@ -828,8 +828,8 @@ mod tests {
         let func_stmt = stmt.as_any().downcast_ref::<FunctionStatement>().unwrap();
 
         assert_eq!(func_stmt.name, String::from("fact"));
-        assert_eq!(func_stmt.function.parameters.len(), 1);
-        assert_eq!(*func_stmt.function.parameters.first().unwrap(), String::from("n"));
+        assert_eq!(func_stmt.function.parameters.len(), 2);
+        assert_eq!(*func_stmt.function.parameters.first().unwrap(), String::from("n1"));
 
         assert_eq!(func_stmt.function.block.len(), 1);
     }
