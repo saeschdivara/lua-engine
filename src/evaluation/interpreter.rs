@@ -1,25 +1,72 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::evaluation::standard_lib::add_standard_functions;
 
+use crate::evaluation::standard_lib::add_standard_functions;
 use crate::evaluation::typing::*;
 use crate::evaluation::typing::Value::Function;
 use crate::parsing::ast::*;
 use crate::parsing::lexer::TokenType;
 use crate::parsing::parser::Parser;
 
-pub struct Scope {
-    pub variables: HashMap<String, Value>,
-}
-
-pub struct Callstack {
+pub struct Runtime {
     pub variables: Vec<HashMap<String, Value>>,
-    pub return_triggered: bool
+    pub object_pool: Vec<ObjectValue>,
+    pub return_triggered: bool,
 }
 
-impl Callstack {
+impl Runtime {
     pub fn add_new_layer(&mut self) {
         self.variables.push(HashMap::new());
+    }
+
+    pub fn create_object(&mut self, value: ObjectValue) -> usize {
+        let pointer = self.object_pool.len();
+        self.object_pool.push(value);
+        return pointer;
+    }
+
+    pub fn get_table(&self, pointer: &usize) -> Option<&TableData> {
+        if let Some(ObjectValue::Table(data)) = self.object_pool.get(pointer.clone()) {
+            Some(data)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_table_mut(&mut self, pointer: &usize) -> Option<&mut TableData> {
+        if let Some(ObjectValue::Table(data)) = self.object_pool.get_mut(pointer.clone()) {
+            Some(data)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_table_property(&self, pointer: &usize, property_name: &String) -> Option<&Value> {
+        if let Some(ObjectValue::Table(data)) = self.object_pool.get(pointer.clone()) {
+            data.properties.get(property_name)
+        } else {
+            None
+        }
+    }
+
+    pub fn update_table_properties(&mut self, pointer: &usize, update_func: impl Fn(&mut HashMap<String, Value>)) {
+        if let Some(table_data) = self.get_table_mut(pointer) {
+            update_func(&mut table_data.properties);
+        }
+    }
+
+    pub fn insert_table_property_via_variable(&mut self, table_name: &String, property_name: &String, value: Value) {
+        self.variables
+            .iter()
+            .rev()
+            .find(|x| { x.contains_key(table_name) })
+            .map(|t| {
+                if let Some(Value::Table(pointer)) = t.get(table_name) {
+                    if let Some(ObjectValue::Table(table)) = self.object_pool.get_mut(pointer.clone()) {
+                        table.properties.insert(property_name.to_string(), value);
+                    }
+                }
+            });
     }
 }
 
@@ -51,10 +98,10 @@ impl Interpreter {
             }
         };
 
-        let mut callstack = Callstack { variables: vec![HashMap::new()], return_triggered: false };
-        add_standard_functions(&mut callstack);
+        let mut runtime = Runtime { variables: vec![HashMap::new()], return_triggered: false, object_pool: vec![] };
+        add_standard_functions(&mut runtime);
 
-        match self.eval_all_statements(&statements, &mut callstack) {
+        match self.eval_all_statements(&statements, &mut runtime) {
             Ok(_) => {}
             Err(err) => {
                 eprintln!("Failed eval: {}", err.message)
@@ -62,9 +109,9 @@ impl Interpreter {
         }
     }
 
-    fn eval_all_statements(&mut self, statements: &Vec<Box<dyn Statement>>, callstack: &mut Callstack) -> EvalStatementResult {
+    fn eval_all_statements(&mut self, statements: &Vec<Box<dyn Statement>>, runtime: &mut Runtime) -> EvalStatementResult {
         for statement in statements {
-            match self.eval_statement(statement, callstack) {
+            match self.eval_statement(statement, runtime) {
                 Ok(_) => {}
                 Err(err) => return Err(err)
             }
@@ -74,17 +121,17 @@ impl Interpreter {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    fn eval_statement(&mut self, stmt: &Box<dyn Statement>, callstack: &mut Callstack) -> EvalStatementResult {
+    fn eval_statement(&mut self, stmt: &Box<dyn Statement>, runtime: &mut Runtime) -> EvalStatementResult {
         if let Some(func) = stmt.as_any().downcast_ref::<FunctionStatement>() {
             let function = func.function.clone();
-            callstack.variables.last_mut().unwrap().insert(func.name.clone(), Function(FunctionType::Expression(function)));
+            runtime.variables.last_mut().unwrap().insert(func.name.clone(), Function(FunctionType::Expression(function)));
             Ok(())
         } else if let Some(call) = stmt.as_any().downcast_ref::<FunctionCallStatement>() {
             if let Some(call_expr) = call.call.as_any().downcast_ref::<CallExpression>() {
-                match self.eval_call_expression(call_expr, callstack) {
+                match self.eval_call_expression(call_expr, runtime) {
                     Ok(_) => Ok(()),
                     Err(err) => {
                         Err(EvalError::new(format!("Failed call statement: {}", err.message)))
@@ -94,16 +141,16 @@ impl Interpreter {
                 Err(EvalError::new("Failed to get call expr".to_string()))
             }
         } else if let Some(if_stmt) = stmt.as_any().downcast_ref::<IfStatement>() {
-            match self.eval_if_statement(if_stmt, callstack) {
+            match self.eval_if_statement(if_stmt, runtime) {
                 Ok(_) => Ok(()),
                 Err(err) => {
                     Err(EvalError::new(format!("Failed if statement: {}", err.message)))
                 }
             }
         } else if let Some(return_stmt) = stmt.as_any().downcast_ref::<ReturnStatement>() {
-            match self.eval_return_statement(return_stmt, callstack) {
+            match self.eval_return_statement(return_stmt, runtime) {
                 Ok(val) => {
-                    callstack.return_triggered = true;
+                    runtime.return_triggered = true;
                     self.return_value = Some(val);
                     Ok(())
                 }
@@ -112,40 +159,39 @@ impl Interpreter {
                 }
             }
         } else if let Some(stmt) = stmt.as_any().downcast_ref::<AssignmentStatement>() {
-            match self.eval_assignment_statement(stmt, callstack) {
+            match self.eval_assignment_statement(stmt, runtime) {
                 Ok(_) => Ok(()),
                 Err(err) => {
                     Err(EvalError::new(format!("Failed assignment statement: {}", err.message)))
                 }
             }
         } else if let Some(stmt) = stmt.as_any().downcast_ref::<TablePropertyAssignmentStatement>() {
-            match self.eval_property_assignment_statement(stmt, callstack) {
+            match self.eval_property_assignment_statement(stmt, runtime) {
                 Ok(_) => Ok(()),
                 Err(err) => {
                     Err(EvalError::new(format!("Failed property assignment statement: {}", err.message)))
                 }
             }
         } else if let Some(stmt) = stmt.as_any().downcast_ref::<LoopStatement>() {
-            match self.eval_loop_statement(stmt, callstack) {
+            match self.eval_loop_statement(stmt, runtime) {
                 Ok(_) => Ok(()),
                 Err(err) => {
                     Err(EvalError::new(format!("Failed loop statement: {}", err.message)))
                 }
             }
         } else if let Some(stmt) = stmt.as_any().downcast_ref::<ForStatement>() {
-            match self.eval_for_statement(stmt, callstack) {
+            match self.eval_for_statement(stmt, runtime) {
                 Ok(_) => Ok(()),
                 Err(err) => {
                     Err(EvalError::new(format!("Failed for statement: {}", err.message)))
                 }
             }
-        }
-        else {
+        } else {
             Err(EvalError::new(format!("Unknown statement type found: {}", stmt.to_string())))
         }
     }
 
-    fn eval_function(&mut self, function: &Rc<FunctionExpression>, arguments: &Vec<Value>, callstack: &mut Callstack) -> EvalResult {
+    fn eval_function(&mut self, function: &Rc<FunctionExpression>, arguments: &Vec<Value>, runtime: &mut Runtime) -> EvalResult {
         let mut new_scope = HashMap::new();
         for i in 0..function.parameters.len() {
             let parameter = &function.parameters[i];
@@ -154,33 +200,33 @@ impl Interpreter {
             new_scope.insert(parameter.clone(), val.clone());
         }
 
-        callstack.variables.push(new_scope);
-        match self.eval_all_statements(&function.block, callstack) {
+        runtime.variables.push(new_scope);
+        match self.eval_all_statements(&function.block, runtime) {
             Ok(_) => {}
             Err(err) => return Err(err)
         }
 
-        if self.return_value.is_none() { return Ok(Value::Nil) }
+        if self.return_value.is_none() { return Ok(Value::Nil); }
         let return_value = (&<Option<Value> as Clone>::clone(&self.return_value).unwrap()).clone();
         self.return_value = None;
-        callstack.return_triggered = false;
+        runtime.return_triggered = false;
 
-        return Ok(return_value)
+        return Ok(return_value);
     }
 
-    fn eval_native_function(&mut self, function: &NativeFunc, arguments: &Vec<Value>) -> EvalResult {
-        return function(arguments)
+    fn eval_native_function(&mut self, function: &NativeFunc, arguments: &Vec<Value>, runtime: &mut Runtime) -> EvalResult {
+        return function(arguments, runtime);
     }
 
-    fn eval_native_mutable_function(&mut self, function: &NativeMutableFunc, arguments: &mut Vec<Value>) -> EvalResult {
-        return function(arguments)
+    fn eval_native_mutable_function(&mut self, function: &NativeMutableFunc, arguments: &mut Vec<Value>, runtime: &mut Runtime) -> EvalResult {
+        return function(arguments, runtime);
     }
 
-    fn eval_expressions(&mut self, arguments: &Vec<Box<dyn Expression>>, callstack: &mut Callstack) -> EvalListResult {
+    fn eval_expressions(&mut self, arguments: &Vec<Box<dyn Expression>>, runtime: &mut Runtime) -> EvalListResult {
         let mut evaluated_values = vec![];
 
         for argument in arguments {
-            match self.eval_expression(argument, callstack) {
+            match self.eval_expression(argument, runtime) {
                 Ok(val) => {
                     evaluated_values.push(val);
                 }
@@ -188,14 +234,14 @@ impl Interpreter {
             }
         }
 
-        return Ok(evaluated_values)
+        return Ok(evaluated_values);
     }
 
-    fn eval_if_statement(&mut self, stmt: &IfStatement, callstack: &mut Callstack) -> EvalResult {
-        let is_true = self.eval_condition(&stmt.condition, callstack);
+    fn eval_if_statement(&mut self, stmt: &IfStatement, runtime: &mut Runtime) -> EvalResult {
+        let is_true = self.eval_condition(&stmt.condition, runtime);
 
         if is_true {
-            match self.eval_all_statements(&stmt.block, callstack) {
+            match self.eval_all_statements(&stmt.block, runtime) {
                 Ok(_) => {}
                 Err(err) => return Err(err)
             }
@@ -203,11 +249,11 @@ impl Interpreter {
             let mut elseif_executed = false;
             for elseif_block in &stmt.elseif_blocks {
                 if let Some(elseif_stmt) = elseif_block.as_any().downcast_ref::<ElseIfStatement>() {
-                    let is_true = self.eval_condition(&elseif_stmt.condition, callstack);
+                    let is_true = self.eval_condition(&elseif_stmt.condition, runtime);
                     if is_true {
                         elseif_executed = true;
 
-                        match self.eval_all_statements(&elseif_stmt.block, callstack) {
+                        match self.eval_all_statements(&elseif_stmt.block, runtime) {
                             Ok(_) => {}
                             Err(err) => return Err(err)
                         }
@@ -218,7 +264,7 @@ impl Interpreter {
             }
 
             if !elseif_executed {
-                match self.eval_all_statements(&stmt.else_block, callstack) {
+                match self.eval_all_statements(&stmt.else_block, runtime) {
                     Ok(_) => {}
                     Err(err) => return Err(err)
                 }
@@ -228,66 +274,66 @@ impl Interpreter {
         return Ok(Value::Nil);
     }
 
-    fn eval_return_statement(&mut self, stmt: &ReturnStatement, callstack: &mut Callstack) -> EvalResult {
-        let result = self.eval_expression(&stmt.value, callstack);
-        callstack.variables.pop();
+    fn eval_return_statement(&mut self, stmt: &ReturnStatement, runtime: &mut Runtime) -> EvalResult {
+        let result = self.eval_expression(&stmt.value, runtime);
+        runtime.variables.pop();
 
         return result;
     }
 
-    fn eval_loop_statement(&mut self, stmt: &LoopStatement, callstack: &mut Callstack) -> EvalResult {
+    fn eval_loop_statement(&mut self, stmt: &LoopStatement, runtime: &mut Runtime) -> EvalResult {
         match stmt.loop_type {
             LoopType::While => {
                 loop {
-                    match self.eval_expression(&stmt.condition, callstack) {
+                    match self.eval_expression(&stmt.condition, runtime) {
                         Ok(condition) => {
-                            if !condition.is_boolean() { return Err(EvalError::new(format!("While condition evaluates to non-bool value: {:?}", condition))) }
+                            if !condition.is_boolean() { return Err(EvalError::new(format!("While condition evaluates to non-bool value: {:?}", condition))); }
 
                             let Value::Boolean(condition) = condition else { todo!() };
                             if condition {
-                                match self.eval_all_statements(&stmt.block, callstack) {
+                                match self.eval_all_statements(&stmt.block, runtime) {
                                     Ok(_) => {
-                                        if callstack.return_triggered { break }
+                                        if runtime.return_triggered { break; }
                                     }
                                     Err(err) => return Err(err)
                                 }
                             } else {
-                                break
+                                break;
                             }
                         }
                         Err(err) => return Err(err)
                     }
                 }
-            },
+            }
             LoopType::Repeat => {
                 loop {
-                    match self.eval_all_statements(&stmt.block, callstack) {
+                    match self.eval_all_statements(&stmt.block, runtime) {
                         Ok(_) => {
-                            if callstack.return_triggered { break }
+                            if runtime.return_triggered { break; }
                         }
                         Err(err) => return Err(err)
                     }
 
-                    match self.eval_expression(&stmt.condition, callstack) {
+                    match self.eval_expression(&stmt.condition, runtime) {
                         Ok(condition) => {
-                            if !condition.is_boolean() { return Err(EvalError::new(format!("While condition evaluates to non-bool value: {:?}", condition))) }
+                            if !condition.is_boolean() { return Err(EvalError::new(format!("While condition evaluates to non-bool value: {:?}", condition))); }
 
                             let Value::Boolean(condition) = condition else { todo!() };
                             if condition {
-                                break
+                                break;
                             }
                         }
                         Err(err) => return Err(err)
                     }
                 }
-            },
+            }
         }
 
         return Ok(Value::Nil);
     }
 
-    fn eval_for_statement(&mut self, stmt: &ForStatement, callstack: &mut Callstack) -> EvalResult {
-        callstack.add_new_layer();
+    fn eval_for_statement(&mut self, stmt: &ForStatement, runtime: &mut Runtime) -> EvalResult {
+        runtime.add_new_layer();
 
         let variable_name = stmt.initial_variable
             .as_any()
@@ -295,50 +341,50 @@ impl Interpreter {
             .unwrap().variable.literal
             .clone();
 
-        match self.eval_statement(&stmt.initial_variable, callstack) {
-            Ok(_) => {},
+        match self.eval_statement(&stmt.initial_variable, runtime) {
+            Ok(_) => {}
             Err(err) => return Err(err)
         }
 
-        let value_to_stop = match self.eval_expression(&stmt.end_value, callstack) {
+        let value_to_stop = match self.eval_expression(&stmt.end_value, runtime) {
             Ok(val) => { val }
-            Err(err) => { return Err(err) }
+            Err(err) => { return Err(err); }
         };
 
-        if !value_to_stop.is_number() { return Err(EvalError::new(format!("For loop stop value is not a number: {:?}", value_to_stop))) }
+        if !value_to_stop.is_number() { return Err(EvalError::new(format!("For loop stop value is not a number: {:?}", value_to_stop))); }
 
-        let increment_value = match self.eval_expression(&stmt.increment_value, callstack) {
+        let increment_value = match self.eval_expression(&stmt.increment_value, runtime) {
             Ok(val) => { val }
-            Err(err) => { return Err(err) }
+            Err(err) => { return Err(err); }
         };
 
-        if !increment_value.is_number() { return Err(EvalError::new(format!("For loop increment value is not a number: {:?}", increment_value))) }
+        if !increment_value.is_number() { return Err(EvalError::new(format!("For loop increment value is not a number: {:?}", increment_value))); }
 
         loop {
-            let current_counter_val = self.get_variable_value(&variable_name, callstack).unwrap();
+            let current_counter_val = self.get_variable_value(&variable_name, runtime).unwrap();
             let will_stop = current_counter_val.is_equals(&value_to_stop);
 
-            match self.eval_all_statements(&stmt.block, callstack) {
+            match self.eval_all_statements(&stmt.block, runtime) {
                 Ok(_) => {
-                    if callstack.return_triggered { break }
+                    if runtime.return_triggered { break; }
                 }
-                Err(err) => { return Err(err) }
+                Err(err) => { return Err(err); }
             }
 
-            let current_counter_val = self.get_variable_value(&variable_name, callstack).unwrap();
+            let current_counter_val = self.get_variable_value(&variable_name, runtime).unwrap();
             let new_counter_val = current_counter_val.plus(&increment_value);
-            callstack.variables.last_mut().unwrap().insert(variable_name.clone(), new_counter_val);
+            runtime.variables.last_mut().unwrap().insert(variable_name.clone(), new_counter_val);
 
-            if will_stop { break }
+            if will_stop { break; }
         }
 
-        callstack.variables.pop();
+        runtime.variables.pop();
 
         return Ok(Value::Nil);
     }
 
-    fn eval_assignment_statement(&mut self, stmt: &AssignmentStatement, callstack: &mut Callstack) -> EvalResult {
-        let result = match self.eval_expression(&stmt.value, callstack) {
+    fn eval_assignment_statement(&mut self, stmt: &AssignmentStatement, runtime: &mut Runtime) -> EvalResult {
+        let result = match self.eval_expression(&stmt.value, runtime) {
             Ok(val) => val,
             Err(err) => return Err(err)
         };
@@ -347,54 +393,44 @@ impl Interpreter {
 
         match stmt.assignment_type {
             AssignmentType::Local => {
-                match self.get_variable_value(variable_name, callstack) {
+                match self.get_variable_value(variable_name, runtime) {
                     None => {
-                        callstack.variables.last_mut().unwrap().insert(variable_name.clone(), result);
+                        runtime.variables.last_mut().unwrap().insert(variable_name.clone(), result);
                     }
                     Some(_) => {
                         // currently considered not allowed
-                        return Err(EvalError::new(format!("Cannot redeclare variable: {}", variable_name)))
+                        return Err(EvalError::new(format!("Cannot redeclare variable: {}", variable_name)));
                     }
                 }
             }
             AssignmentType::Reassignment => {
-                callstack.variables.last_mut().unwrap().insert(variable_name.clone(), result);
+                runtime.variables.last_mut().unwrap().insert(variable_name.clone(), result);
             }
         }
 
         return Ok(Value::Nil);
     }
 
-    fn eval_property_assignment_statement(&mut self, stmt: &TablePropertyAssignmentStatement, callstack: &mut Callstack) -> EvalResult {
-
-        match self.eval_expression(&stmt.value, callstack) {
-            Ok(val) => {
-                let table_val = match self.get_variable_value_mut(&stmt.table_variable, callstack) {
-                    None => return Err(EvalError::new(format!("Could not find variable: {}", &stmt.table_variable))),
-                    Some(val) => val
-                };
-
-                if let Value::Table(_, properties, _) = table_val {
-                    properties.insert(stmt.property_name.clone(), val);
-                    Ok(Value::Nil)
-                } else {
-                    return Err(EvalError::new(format!("Variable {} is not a table", &stmt.table_variable)))
-                }
-            },
+    fn eval_property_assignment_statement(&mut self, stmt: &TablePropertyAssignmentStatement, runtime: &mut Runtime) -> EvalResult {
+        let assigned_value = match self.eval_expression(&stmt.value, runtime) {
+            Ok(val) => val,
             Err(err) => return Err(err)
-        }
+        };
 
+        runtime.insert_table_property_via_variable(&stmt.table_variable, &stmt.property_name, assigned_value);
+
+        Ok(Value::Nil)
     }
 
-    fn eval_expression(&mut self, expr: &Box<dyn Expression>, callstack: &mut Callstack) -> EvalResult {
+    fn eval_expression(&mut self, expr: &Box<dyn Expression>, runtime: &mut Runtime) -> EvalResult {
         if let Some(int_expr) = expr.as_any().downcast_ref::<IntExpression>() {
             Ok(Value::Number(NumberType::Int(int_expr.value)))
         } else if let Some(expr) = expr.as_any().downcast_ref::<TableExpression>() {
-            self.eval_table_expression(expr, callstack)
+            self.eval_table_expression(expr, runtime)
         } else if let Some(expr) = expr.as_any().downcast_ref::<FunctionWrapperExpression>() {
             Ok(Function(FunctionType::Expression(expr.func.clone())))
         } else if let Some(ident_expr) = expr.as_any().downcast_ref::<IdentifierExpression>() {
-            if let Some(val) = self.get_variable_value(&ident_expr.identifier, callstack) {
+            if let Some(val) = self.get_variable_value(&ident_expr.identifier, runtime) {
                 Ok(val.clone())
             } else {
                 Err(EvalError::new(format!("Could not find variable: {}", &ident_expr.identifier)))
@@ -402,52 +438,52 @@ impl Interpreter {
         } else if let Some(expr) = expr.as_any().downcast_ref::<StringExpression>() {
             Ok(Value::String(expr.value.clone()))
         } else if let Some(expr) = expr.as_any().downcast_ref::<PrefixExpression>() {
-            self.eval_prefix_expression(expr, callstack)
+            self.eval_prefix_expression(expr, runtime)
         } else if let Some(expr) = expr.as_any().downcast_ref::<InfixExpression>() {
-            self.eval_infix_expression(expr, callstack)
+            self.eval_infix_expression(expr, runtime)
         } else if let Some(expr) = expr.as_any().downcast_ref::<CallExpression>() {
-            self.eval_call_expression(expr, callstack)
+            self.eval_call_expression(expr, runtime)
         } else {
             Err(EvalError::new(format!("Unknown expression: {}", expr.to_string())))
         }
     }
 
-    fn eval_table_expression(&mut self, expr: &TableExpression, callstack: &mut Callstack) -> EvalResult {
+    fn eval_table_expression(&mut self, expr: &TableExpression, runtime: &mut Runtime) -> EvalResult {
         let mut values = vec![];
         let mut properties = HashMap::new();
 
         for value_expr in &expr.values {
             if let Some(assignment) = value_expr.as_any().downcast_ref::<AssignmentExpression>() {
-                match self.eval_expression(&assignment.value, callstack) {
+                match self.eval_expression(&assignment.value, runtime) {
                     Ok(val) => {
                         properties.insert(assignment.variable.clone(), val);
                     }
                     Err(err) => return Err(err)
                 }
             } else {
-                match self.eval_expression(value_expr, callstack) {
+                match self.eval_expression(value_expr, runtime) {
                     Ok(value) => { values.push(value) }
                     Err(err) => return Err(err)
                 }
             }
         }
 
-        Ok(Value::Table(values, properties, MetaTable::empty()))
+        Ok(Value::Table(runtime.create_object(ObjectValue::table(TableData { values, properties, meta_table: None }))))
     }
 
-    fn eval_call_expression(&mut self, expr: &CallExpression, callstack: &mut Callstack) -> EvalResult {
-        match self.eval_expression(&expr.function, callstack) {
+    fn eval_call_expression(&mut self, expr: &CallExpression, runtime: &mut Runtime) -> EvalResult {
+        match self.eval_expression(&expr.function, runtime) {
             Ok(function_val) => {
                 if let Function(func_type) = function_val {
-                    let mut arguments = match self.eval_expressions(&expr.arguments, callstack) {
+                    let mut arguments = match self.eval_expressions(&expr.arguments, runtime) {
                         Ok(args) => args,
                         Err(err) => return Err(err)
                     };
 
                     match func_type {
-                        FunctionType::Native(func) => self.eval_native_function(&func, &arguments),
-                        FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments),
-                        FunctionType::Expression(func) => self.eval_function(&func, &arguments, callstack),
+                        FunctionType::Native(func) => self.eval_native_function(&func, &arguments, runtime),
+                        FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments, runtime),
+                        FunctionType::Expression(func) => self.eval_function(&func, &arguments, runtime),
                     }
                 } else {
                     Err(EvalError::new("Unknown function error".to_string()))
@@ -457,15 +493,15 @@ impl Interpreter {
         }
     }
 
-    fn eval_prefix_expression(&mut self, expr: &PrefixExpression, callstack: &mut Callstack) -> EvalResult {
-        let value = match self.eval_expression(&expr.value, callstack) {
+    fn eval_prefix_expression(&mut self, expr: &PrefixExpression, runtime: &mut Runtime) -> EvalResult {
+        let value = match self.eval_expression(&expr.value, runtime) {
             Ok(val) => val,
             Err(err) => return Err(err),
         };
 
         match expr.operator {
             TokenType::Minus => {
-                if !value.is_number() { return Err(EvalError::new(format!("- is not supported as prefix for non-numbers: {:?}", value))) }
+                if !value.is_number() { return Err(EvalError::new(format!("- is not supported as prefix for non-numbers: {:?}", value))); }
 
                 let minus_factor = Value::Number(NumberType::Int(-1));
                 Ok(value.multiply(&minus_factor))
@@ -474,13 +510,13 @@ impl Interpreter {
         }
     }
 
-    fn eval_infix_expression(&mut self, expr: &InfixExpression, callstack: &mut Callstack) -> EvalResult {
-        let left = match self.eval_expression(&expr.left_value, callstack) {
+    fn eval_infix_expression(&mut self, expr: &InfixExpression, runtime: &mut Runtime) -> EvalResult {
+        let left = match self.eval_expression(&expr.left_value, runtime) {
             Ok(val) => val,
             Err(err) => return Err(err),
         };
 
-        let right = match self.eval_expression(&expr.right_value, callstack) {
+        let right = match self.eval_expression(&expr.right_value, runtime) {
             Ok(val) => val,
             Err(err) => return Err(err),
         };
@@ -495,19 +531,23 @@ impl Interpreter {
                 }
 
                 let mut arguments = vec![left.clone(), right];
-                
-                match left {
-                    Value::Table(_, _, MetaTable{ value: Some(ref meta_table) }) => {
-                        let box Value::Table(_, properties, _) = meta_table else { todo!() };
-                        if let Some(Function(plus_func)) = properties.get("__add") {
 
-                            return match plus_func {
-                                FunctionType::Native(func) => self.eval_native_function(func, &arguments),
-                                FunctionType::NativeMutable(func) => self.eval_native_mutable_function(func, &mut arguments),
-                                FunctionType::Expression(func) => self.eval_function(func, &arguments, callstack),
+                match left {
+                    Value::Table(pointer) => {
+                        if let Some(table_data) = runtime.get_table(&pointer) {
+                            if let Some(Value::Table(meta_table_pointer)) = table_data.meta_table {
+                                if let Some(Function(plus_func)) = runtime.get_table_property(&meta_table_pointer, &"__add".to_string()) {
+                                    return match plus_func.clone() {
+                                        FunctionType::Native(func) => self.eval_native_function(&func, &arguments, runtime),
+                                        FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments, runtime),
+                                        FunctionType::Expression(func) => self.eval_function(&func, &arguments, runtime),
+                                    };
+                                }
                             }
                         }
-                    },
+
+                        return Err(EvalError::new("Wrong type used for plus".to_string()));
+                    }
                     _ => return Err(EvalError::new("Wrong type used for plus".to_string()))
                 }
             }
@@ -550,7 +590,7 @@ impl Interpreter {
             TokenType::ShiftLeft => {}
             TokenType::ShiftRight => {}
             TokenType::DoubleEquals => {
-                return Ok(Value::Boolean(left.is_equals(&right)))
+                return Ok(Value::Boolean(left.is_equals(&right)));
             }
             TokenType::TildeEqual => {}
             TokenType::LowerEqual => {
@@ -613,8 +653,8 @@ impl Interpreter {
         panic!("Should never reach this")
     }
 
-    fn eval_condition(&mut self, condition: &Box<dyn Expression>, callstack: &mut Callstack) -> bool {
-        let condition = self.eval_expression(condition, callstack);
+    fn eval_condition(&mut self, condition: &Box<dyn Expression>, runtime: &mut Runtime) -> bool {
+        let condition = self.eval_expression(condition, runtime);
 
         let condition_res = match condition {
             Ok(condition_res) => condition_res,
@@ -627,37 +667,31 @@ impl Interpreter {
         };
     }
 
-    fn get_variable_value<'a>(&'a self, variable: &String, callstack: &'a mut Callstack) -> Option<&Value> {
+    fn get_variable_value<'a>(&'a self, variable: &String, runtime: &'a Runtime) -> Option<&Value> {
         if variable.contains(".") {
             let Some((table_name, property_name)) = variable.split_once(".") else { todo!() };
-            let table = callstack.variables
+            let table = runtime.variables
                 .iter()
                 .rev()
-                .find(|x| {x.contains_key(table_name)})
-                .map(move |t| {t.get(table_name).unwrap()});
+                .find(|x| { x.contains_key(table_name) })
+                .map(move |t| { t.get(table_name).unwrap() });
 
             if let Some(table_val) = table {
                 match table_val {
-                    Value::Table(_, properties, _) => properties.get(property_name),
+                    Value::Table(pointer) => {
+                        runtime.get_table_property(pointer, &property_name.to_string())
+                    }
                     _ => None
                 }
             } else {
                 None
             }
         } else {
-            callstack.variables
+            runtime.variables
                 .iter()
                 .rev()
-                .find(|x| {x.contains_key(variable)})
-                .map(move |t| {t.get(variable).unwrap()})
+                .find(|x| { x.contains_key(variable) })
+                .map(move |t| { t.get(variable).unwrap() })
         }
-    }
-
-    fn get_variable_value_mut<'a>(&'a mut self, variable: &String, callstack: &'a mut Callstack) -> Option<&mut Value> {
-        callstack.variables
-            .iter_mut()
-            .rev()
-            .find(|x| {x.contains_key(variable)})
-            .map(move |t| {t.get_mut(variable).unwrap()})
     }
 }

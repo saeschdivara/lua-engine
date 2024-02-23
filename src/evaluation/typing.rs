@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::evaluation::interpreter::Runtime;
 
 use crate::parsing::ast::FunctionExpression;
 
@@ -18,8 +19,8 @@ impl EvalError {
 pub type EvalResult = Result<Value, EvalError>;
 pub type EvalListResult = Result<Vec<Value>, EvalError>;
 pub type EvalStatementResult = Result<(), EvalError>;
-pub type NativeFunc = fn(args: &Vec<Value>) -> EvalResult;
-pub type NativeMutableFunc = fn(args: &mut Vec<Value>) -> EvalResult;
+pub type NativeFunc = fn(args: &Vec<Value>, callstack: &mut Runtime) -> EvalResult;
+pub type NativeMutableFunc = fn(args: &mut Vec<Value>, callstack: &mut Runtime) -> EvalResult;
 
 #[derive(Clone, Debug)]
 pub enum NumberType {
@@ -35,15 +36,20 @@ pub enum FunctionType {
 }
 
 #[derive(Clone, Debug)]
-pub struct MetaTable {
-    pub value: Option<Box<Value>>
+pub struct TableData {
+    pub values: Vec<Value>,
+    pub properties: HashMap<String, Value>,
+    pub meta_table: Option<Value>,
 }
 
-impl MetaTable {
-    pub fn empty() -> Self {
-        return Self {
-            value: None,
-        }
+#[derive(Clone, Debug)]
+pub enum ObjectValue {
+    Table(TableData),
+}
+
+impl ObjectValue {
+    pub fn table(val: TableData) -> Self {
+        return Self::Table(val);
     }
 }
 
@@ -56,7 +62,7 @@ pub enum Value {
     Function(FunctionType),
     UserData,
     Thread,
-    Table(Vec<Value>, HashMap<String, Value>, MetaTable),
+    Table(usize),
 }
 
 impl Value {
