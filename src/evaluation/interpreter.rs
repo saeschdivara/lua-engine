@@ -471,65 +471,109 @@ impl Interpreter {
                     );
                 }
 
-                let mut arguments = vec![left.clone(), right];
-
-                match left {
-                    Value::Table(pointer) => {
-                        if let Some(table_data) = runtime.get_table(&pointer) {
-                            if let Some(Value::Table(meta_table_pointer)) = table_data.meta_table {
-                                if let Some(Function(plus_func)) = runtime.get_table_property(&meta_table_pointer, &"__add".to_string()) {
-                                    return match plus_func.clone() {
-                                        FunctionType::Native(func) => self.eval_native_function(&func, &arguments, runtime),
-                                        FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments, runtime),
-                                        FunctionType::Expression(func) => self.eval_function(&func, &arguments, runtime),
-                                    };
-                                }
-                            }
-                        }
-
-                        return Err(EvalError::new("Wrong type used for plus".to_string()));
-                    }
-                    _ => return Err(EvalError::new("Wrong type used for plus".to_string()))
-                }
+                return self.eval_table_meta_function(&left, &right, "__add", runtime);
             }
             TokenType::Minus => {
-                if !left.is_number() || !right.is_number() {
-                    return Err(EvalError::new("Wrong type used for minus".to_string()));
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l - r)) })
+                    );
                 }
 
-                return Ok(self.eval_operation_on_int(
-                    &left, &right,
-                    |l, r| { Value::Number(NumberType::Int(l - r)) })
-                );
+                return self.eval_table_meta_function(&left, &right, "__sub", runtime);
             }
             TokenType::Star => {
-                if !left.is_number() || !right.is_number() {
-                    return Err(EvalError::new("Wrong type used for star".to_string()));
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l * r)) })
+                    );
                 }
 
-                return Ok(self.eval_operation_on_int(
-                    &left, &right,
-                    |l, r| { Value::Number(NumberType::Int(l * r)) })
-                );
+                return self.eval_table_meta_function(&left, &right, "__mul", runtime);
             }
-            TokenType::Slash => {}
-            TokenType::Percent => {}
-            TokenType::Caret => {
-                if !left.is_number() || !right.is_number() {
-                    return Err(EvalError::new("Wrong type used for caret".to_string()));
+            TokenType::Slash => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Float(l as f64 / r as f64)) })
+                    );
                 }
 
-                return Ok(self.eval_operation_on_int(
-                    &left, &right,
-                    |l, r| { Value::Number(NumberType::Int(i64::pow(l, r as u32))) })
-                );
+                return self.eval_table_meta_function(&left, &right, "__div", runtime);
+            }
+            TokenType::Percent => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l % r)) })
+                    );
+                }
+
+                return self.eval_table_meta_function(&left, &right, "__mod", runtime);
+            }
+            TokenType::Caret => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(i64::pow(l, r as u32))) })
+                    );
+                }
+
+                return self.eval_table_meta_function(&left, &right, "__pow", runtime);
             }
             TokenType::Hash => {}
-            TokenType::Ampersand => {}
-            TokenType::Tilde => {}
-            TokenType::Bar => {}
-            TokenType::ShiftLeft => {}
-            TokenType::ShiftRight => {}
+            TokenType::Ampersand => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l & r)) })
+                    );
+                }
+
+                return self.eval_table_meta_function(&left, &right, "__band", runtime);
+            }
+            TokenType::Tilde => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l ^ r)) })
+                    );
+                }
+
+                return self.eval_table_meta_function(&left, &right, "__bxor", runtime);
+            }
+            TokenType::Bar => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l | r)) })
+                    );
+                }
+
+                return self.eval_table_meta_function(&left, &right, "__bor", runtime);
+            }
+            TokenType::ShiftLeft => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l << r)) })
+                    );
+                }
+
+                return self.eval_table_meta_function(&left, &right, "__shl", runtime);
+            }
+            TokenType::ShiftRight => {
+                if left.is_number() && right.is_number() {
+                    return Ok(self.eval_operation_on_int(
+                        &left, &right,
+                        |l, r| { Value::Number(NumberType::Int(l >> r)) })
+                    );
+                }
+
+                return self.eval_table_meta_function(&left, &right, "__shr", runtime);
+            }
             TokenType::DoubleEquals => {
                 return Ok(Value::Boolean(left.is_equals(&right)));
             }
@@ -592,6 +636,29 @@ impl Interpreter {
         }
 
         panic!("Should never reach this")
+    }
+
+    fn eval_table_meta_function(&mut self, left: &Value, right: &Value, meta_function_name: &str, runtime: &mut Runtime) -> EvalResult {
+        let mut arguments = vec![left.clone(), right.clone()];
+
+        match left {
+            Value::Table(pointer) => {
+                if let Some(table_data) = runtime.get_table(&pointer) {
+                    if let Some(Value::Table(meta_table_pointer)) = table_data.meta_table {
+                        if let Some(Function(plus_func)) = runtime.get_table_property(&meta_table_pointer, &meta_function_name.to_string()) {
+                            return match plus_func.clone() {
+                                FunctionType::Native(func) => self.eval_native_function(&func, &arguments, runtime),
+                                FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments, runtime),
+                                FunctionType::Expression(func) => self.eval_function(&func, &arguments, runtime),
+                            };
+                        }
+                    }
+                }
+
+                return Err(EvalError::new(format!("Wrong type used for {}", meta_function_name)));
+            }
+            _ => return return Err(EvalError::new(format!("Wrong type used for {}", meta_function_name))),
+        };
     }
 
     fn eval_condition(&mut self, condition: &Box<dyn Expression>, runtime: &mut Runtime) -> bool {

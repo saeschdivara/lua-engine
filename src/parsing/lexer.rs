@@ -199,6 +199,10 @@ impl Lexer {
                         self.read_char();
                         self.create_token(TokenType::LowerEqual, "<=".to_string())
                     }
+                    else if let Some(other_character) = self.peek_char() && other_character == '<' {
+                        self.read_char();
+                        self.create_token(TokenType::ShiftLeft, "<<".to_string())
+                    }
                     else { self.create_token(TokenType::Lower, ch.to_string()) }
 
                 },
@@ -206,6 +210,10 @@ impl Lexer {
                     if let Some(other_character) = self.peek_char() && other_character == '=' {
                         self.read_char();
                         self.create_token(TokenType::GreaterEqual, ">=".to_string())
+                    }
+                    else if let Some(other_character) = self.peek_char() && other_character == '>' {
+                        self.read_char();
+                        self.create_token(TokenType::ShiftRight, ">>".to_string())
                     }
                     else { self.create_token(TokenType::Greater, ch.to_string()) }
 
