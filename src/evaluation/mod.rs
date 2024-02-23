@@ -1,4 +1,4 @@
 pub mod interpreter;
-mod typing;
+pub mod runtime;
+pub mod typing;
 mod standard_lib;
-mod runtime;

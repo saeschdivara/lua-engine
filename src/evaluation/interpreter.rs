@@ -20,7 +20,11 @@ impl Interpreter {
         };
     }
 
-    pub fn evaluate_file(&mut self, file_path: String) -> &Option<Value> {
+    pub fn prepare_runtime(&self, runtime: &mut Runtime) {
+        add_standard_functions(runtime);
+    }
+
+    pub fn evaluate_file(&mut self, file_path: String, runtime: &mut Runtime) -> &Option<Value> {
         let contents = std::fs::read_to_string(file_path)
             .expect("Should have been able to read the file");
 
@@ -37,10 +41,7 @@ impl Interpreter {
             }
         };
 
-        let mut runtime = Runtime::new();
-        add_standard_functions(&mut runtime);
-
-        match self.eval_all_statements(&statements, &mut runtime) {
+        match self.eval_all_statements(&statements, runtime) {
             Ok(_) => &self.return_value,
             Err(err) => {
                 eprintln!("Failed eval: {}", err.message);

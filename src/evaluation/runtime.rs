@@ -12,6 +12,12 @@ impl Runtime {
         Runtime { stack: vec![HashMap::new()], return_triggered: false, object_pool: vec![] }
     }
 
+    pub fn add_global_variable(&mut self, variable: &str, value: Value) {
+        if let Some(global_stack) = self.stack.first_mut() {
+            global_stack.insert(variable.to_string(), value);
+        }
+    }
+
     pub fn add_new_layer(&mut self) {
         self.stack.push(HashMap::new());
     }
