@@ -1,4 +1,4 @@
-use crate::evaluation::interpreter::Runtime;
+use crate::evaluation::runtime::Runtime;
 use crate::evaluation::typing::{EvalError, EvalResult, FunctionType, Value};
 use crate::evaluation::typing::Value::Function;
 

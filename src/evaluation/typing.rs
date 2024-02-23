@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::evaluation::interpreter::Runtime;
+use crate::evaluation::runtime::Runtime;
 
 use crate::parsing::ast::FunctionExpression;
 

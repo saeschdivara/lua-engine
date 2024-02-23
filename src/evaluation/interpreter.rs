@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::evaluation::runtime::Runtime;
 
 use crate::evaluation::standard_lib::add_standard_functions;
 use crate::evaluation::typing::*;
@@ -7,68 +8,6 @@ use crate::evaluation::typing::Value::Function;
 use crate::parsing::ast::*;
 use crate::parsing::lexer::TokenType;
 use crate::parsing::parser::Parser;
-
-pub struct Runtime {
-    pub variables: Vec<HashMap<String, Value>>,
-    pub object_pool: Vec<ObjectValue>,
-    pub return_triggered: bool,
-}
-
-impl Runtime {
-    pub fn add_new_layer(&mut self) {
-        self.variables.push(HashMap::new());
-    }
-
-    pub fn create_object(&mut self, value: ObjectValue) -> usize {
-        let pointer = self.object_pool.len();
-        self.object_pool.push(value);
-        return pointer;
-    }
-
-    pub fn get_table(&self, pointer: &usize) -> Option<&TableData> {
-        if let Some(ObjectValue::Table(data)) = self.object_pool.get(pointer.clone()) {
-            Some(data)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_table_mut(&mut self, pointer: &usize) -> Option<&mut TableData> {
-        if let Some(ObjectValue::Table(data)) = self.object_pool.get_mut(pointer.clone()) {
-            Some(data)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_table_property(&self, pointer: &usize, property_name: &String) -> Option<&Value> {
-        if let Some(ObjectValue::Table(data)) = self.object_pool.get(pointer.clone()) {
-            data.properties.get(property_name)
-        } else {
-            None
-        }
-    }
-
-    pub fn update_table_properties(&mut self, pointer: &usize, update_func: impl Fn(&mut HashMap<String, Value>)) {
-        if let Some(table_data) = self.get_table_mut(pointer) {
-            update_func(&mut table_data.properties);
-        }
-    }
-
-    pub fn insert_table_property_via_variable(&mut self, table_name: &String, property_name: &String, value: Value) {
-        self.variables
-            .iter()
-            .rev()
-            .find(|x| { x.contains_key(table_name) })
-            .map(|t| {
-                if let Some(Value::Table(pointer)) = t.get(table_name) {
-                    if let Some(ObjectValue::Table(table)) = self.object_pool.get_mut(pointer.clone()) {
-                        table.properties.insert(property_name.to_string(), value);
-                    }
-                }
-            });
-    }
-}
 
 pub struct Interpreter {
     return_value: Option<Value>,
@@ -98,7 +37,7 @@ impl Interpreter {
             }
         };
 
-        let mut runtime = Runtime { variables: vec![HashMap::new()], return_triggered: false, object_pool: vec![] };
+        let mut runtime = Runtime::new();
         add_standard_functions(&mut runtime);
 
         match self.eval_all_statements(&statements, &mut runtime) {
