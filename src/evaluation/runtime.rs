@@ -2,18 +2,18 @@ use std::collections::HashMap;
 use crate::evaluation::typing::{ObjectValue, TableData, Value};
 
 pub struct Runtime {
-    pub variables: Vec<HashMap<String, Value>>,
+    pub stack: Vec<HashMap<String, Value>>,
     pub object_pool: Vec<ObjectValue>,
     pub return_triggered: bool,
 }
 
 impl Runtime {
     pub fn new() -> Self {
-        Runtime { variables: vec![HashMap::new()], return_triggered: false, object_pool: vec![] }
+        Runtime { stack: vec![HashMap::new()], return_triggered: false, object_pool: vec![] }
     }
 
     pub fn add_new_layer(&mut self) {
-        self.variables.push(HashMap::new());
+        self.stack.push(HashMap::new());
     }
 
     pub fn create_object(&mut self, value: ObjectValue) -> usize {
@@ -47,7 +47,7 @@ impl Runtime {
     }
 
     pub fn insert_table_property_via_variable(&mut self, table_name: &String, property_name: &String, value: Value) {
-        self.variables
+        self.stack
             .iter()
             .rev()
             .find(|x| { x.contains_key(table_name) })

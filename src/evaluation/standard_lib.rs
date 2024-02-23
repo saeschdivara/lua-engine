@@ -32,6 +32,6 @@ pub fn add_standard_functions(callstack: &mut Runtime) {
         Ok(Value::Nil)
     };
 
-    callstack.variables.first_mut().unwrap().insert("print".to_string(), Function(FunctionType::Native(my_print)));
-    callstack.variables.first_mut().unwrap().insert("setmetatable".to_string(), Function(FunctionType::NativeMutable(set_metatable)));
+    callstack.stack.first_mut().unwrap().insert("print".to_string(), Function(FunctionType::Native(my_print)));
+    callstack.stack.first_mut().unwrap().insert("setmetatable".to_string(), Function(FunctionType::NativeMutable(set_metatable)));
 }

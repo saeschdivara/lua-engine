@@ -66,7 +66,7 @@ impl Interpreter {
     fn eval_statement(&mut self, stmt: &Box<dyn Statement>, runtime: &mut Runtime) -> EvalStatementResult {
         if let Some(func) = stmt.as_any().downcast_ref::<FunctionStatement>() {
             let function = func.function.clone();
-            runtime.variables.last_mut().unwrap().insert(func.name.clone(), Function(FunctionType::Expression(function)));
+            runtime.stack.last_mut().unwrap().insert(func.name.clone(), Function(FunctionType::Expression(function)));
             Ok(())
         } else if let Some(call) = stmt.as_any().downcast_ref::<FunctionCallStatement>() {
             if let Some(call_expr) = call.call.as_any().downcast_ref::<CallExpression>() {
@@ -139,7 +139,7 @@ impl Interpreter {
             new_scope.insert(parameter.clone(), val.clone());
         }
 
-        runtime.variables.push(new_scope);
+        runtime.stack.push(new_scope);
         match self.eval_all_statements(&function.block, runtime) {
             Ok(_) => {}
             Err(err) => return Err(err)
@@ -215,7 +215,7 @@ impl Interpreter {
 
     fn eval_return_statement(&mut self, stmt: &ReturnStatement, runtime: &mut Runtime) -> EvalResult {
         let result = self.eval_expression(&stmt.value, runtime);
-        runtime.variables.pop();
+        runtime.stack.pop();
 
         return result;
     }
@@ -312,12 +312,12 @@ impl Interpreter {
 
             let current_counter_val = self.get_variable_value(&variable_name, runtime).unwrap();
             let new_counter_val = current_counter_val.plus(&increment_value);
-            runtime.variables.last_mut().unwrap().insert(variable_name.clone(), new_counter_val);
+            runtime.stack.last_mut().unwrap().insert(variable_name.clone(), new_counter_val);
 
             if will_stop { break; }
         }
 
-        runtime.variables.pop();
+        runtime.stack.pop();
 
         return Ok(Value::Nil);
     }
@@ -334,7 +334,7 @@ impl Interpreter {
             AssignmentType::Local => {
                 match self.get_variable_value(variable_name, runtime) {
                     None => {
-                        runtime.variables.last_mut().unwrap().insert(variable_name.clone(), result);
+                        runtime.stack.last_mut().unwrap().insert(variable_name.clone(), result);
                     }
                     Some(_) => {
                         // currently considered not allowed
@@ -343,7 +343,7 @@ impl Interpreter {
                 }
             }
             AssignmentType::Reassignment => {
-                runtime.variables.last_mut().unwrap().insert(variable_name.clone(), result);
+                runtime.stack.last_mut().unwrap().insert(variable_name.clone(), result);
             }
         }
 
@@ -609,7 +609,7 @@ impl Interpreter {
     fn get_variable_value<'a>(&'a self, variable: &String, runtime: &'a Runtime) -> Option<&Value> {
         if variable.contains(".") {
             let Some((table_name, property_name)) = variable.split_once(".") else { todo!() };
-            let table = runtime.variables
+            let table = runtime.stack
                 .iter()
                 .rev()
                 .find(|x| { x.contains_key(table_name) })
@@ -626,7 +626,7 @@ impl Interpreter {
                 None
             }
         } else {
-            runtime.variables
+            runtime.stack
                 .iter()
                 .rev()
                 .find(|x| { x.contains_key(variable) })
