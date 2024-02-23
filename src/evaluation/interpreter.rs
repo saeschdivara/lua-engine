@@ -438,8 +438,6 @@ impl Interpreter {
     }
 
     fn eval_require_function(&mut self, arguments: &Vec<Value>, runtime: &mut Runtime) -> EvalResult {
-        if arguments.len() != 1 { return Err(EvalError::new("Only 1 arg allowed for the require function".to_string())) }
-
         let current_stack_level = runtime.stack.len();
         runtime.stack.push(HashMap::new());
 
