@@ -1,15 +1,21 @@
 use std::collections::HashMap;
-use crate::evaluation::typing::{ObjectValue, TableData, Value};
+use crate::evaluation::typing::{EvalError, ObjectValue, TableData, Value};
 
 pub struct Runtime {
     pub stack: Vec<HashMap<String, Value>>,
     pub object_pool: Vec<ObjectValue>,
     pub return_triggered: bool,
+    pub error: Option<EvalError>,
 }
 
 impl Runtime {
     pub fn new() -> Self {
-        Runtime { stack: vec![HashMap::new()], return_triggered: false, object_pool: vec![] }
+        Runtime {
+            stack: vec![HashMap::new()],
+            return_triggered: false,
+            object_pool: vec![],
+            error: None,
+        }
     }
 
     pub fn add_global_variable(&mut self, variable: &str, value: Value) {

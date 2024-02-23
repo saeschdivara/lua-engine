@@ -30,6 +30,7 @@ pub enum NumberType {
 
 #[derive(Clone, Debug)]
 pub enum FunctionType {
+    Require,
     Native(NativeFunc),
     NativeMutable(NativeMutableFunc),
     Expression(Rc<FunctionExpression>),

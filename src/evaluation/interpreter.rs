@@ -37,6 +37,7 @@ impl Interpreter {
                     "Failed to parse program: {} [{}:{}] {}",
                     err.file_path, err.line, err.column, err.message
                 );
+
                 return &None;
             }
         };
@@ -44,7 +45,8 @@ impl Interpreter {
         match self.eval_all_statements(&statements, runtime) {
             Ok(_) => &self.return_value,
             Err(err) => {
-                eprintln!("Failed eval: {}", err.message);
+                eprintln!("Failed eval: {}", &err.message);
+                runtime.error = Some(err);
                 &None
             }
         }
@@ -425,6 +427,7 @@ impl Interpreter {
                         FunctionType::Native(func) => self.eval_native_function(&func, &arguments, runtime),
                         FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments, runtime),
                         FunctionType::Expression(func) => self.eval_function(&func, &arguments, runtime),
+                        FunctionType::Require => self.eval_require_function(&arguments, runtime),
                     }
                 } else {
                     Err(EvalError::new("Unknown function error".to_string()))
@@ -432,6 +435,30 @@ impl Interpreter {
             }
             Err(err) => Err(err)
         }
+    }
+
+    fn eval_require_function(&mut self, arguments: &Vec<Value>, runtime: &mut Runtime) -> EvalResult {
+        if arguments.len() != 1 { return Err(EvalError::new("Only 1 arg allowed for the require function".to_string())) }
+
+        let current_stack_level = runtime.stack.len();
+        runtime.stack.push(HashMap::new());
+
+        let result = if let Some(Value::String(file_path)) = arguments.first() {
+            if let Some(result_value) = self.evaluate_file(file_path.clone() + ".lua", runtime) {
+                Ok(result_value.clone())
+            } else {
+                if let Some(error) = &runtime.error {
+                    Err(EvalError::new(error.message.clone()))
+                } else {
+                    Ok(Value::Nil)
+                }
+            }
+        } else {
+            Err(EvalError::new("Only 1 arg allowed for the require function".to_string()))
+        };
+
+        if runtime.stack.len() != current_stack_level { runtime.stack.pop(); }
+        return result;
     }
 
     fn eval_prefix_expression(&mut self, expr: &PrefixExpression, runtime: &mut Runtime) -> EvalResult {
@@ -641,7 +668,7 @@ impl Interpreter {
     fn eval_table_meta_function(&mut self, left: &Value, right: &Value, meta_function_name: &str, runtime: &mut Runtime) -> EvalResult {
         let mut arguments = vec![left.clone(), right.clone()];
 
-        match left {
+        return match left {
             Value::Table(pointer) => {
                 if let Some(table_data) = runtime.get_table(&pointer) {
                     if let Some(Value::Table(meta_table_pointer)) = table_data.meta_table {
@@ -650,14 +677,15 @@ impl Interpreter {
                                 FunctionType::Native(func) => self.eval_native_function(&func, &arguments, runtime),
                                 FunctionType::NativeMutable(func) => self.eval_native_mutable_function(&func, &mut arguments, runtime),
                                 FunctionType::Expression(func) => self.eval_function(&func, &arguments, runtime),
+                                FunctionType::Require => self.eval_require_function(&arguments, runtime),
                             };
                         }
                     }
                 }
 
-                return Err(EvalError::new(format!("Wrong type used for {}", meta_function_name)));
+                Err(EvalError::new(format!("Wrong type used for {}", meta_function_name)))
             }
-            _ => return return Err(EvalError::new(format!("Wrong type used for {}", meta_function_name))),
+            _ => Err(EvalError::new(format!("Wrong type used for {}", meta_function_name))),
         };
     }
 

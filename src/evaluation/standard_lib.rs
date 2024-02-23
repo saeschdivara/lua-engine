@@ -10,7 +10,7 @@ pub fn add_standard_functions(callstack: &mut Runtime) {
         Ok(Value::Nil)
     };
 
-    let set_metatable = |args: &mut Vec<Value>, callstack: &mut Runtime| -> EvalResult {
+    let set_metatable = |args: &Vec<Value>, callstack: &mut Runtime| -> EvalResult {
         if args.len() != 2 { return Err(EvalError::new("setmetatable expects 2 arguments".to_string())) }
 
         let meta_table_value = args.last().unwrap().clone();
@@ -33,5 +33,6 @@ pub fn add_standard_functions(callstack: &mut Runtime) {
     };
 
     callstack.stack.first_mut().unwrap().insert("print".to_string(), Function(FunctionType::Native(my_print)));
-    callstack.stack.first_mut().unwrap().insert("setmetatable".to_string(), Function(FunctionType::NativeMutable(set_metatable)));
+    callstack.stack.first_mut().unwrap().insert("require".to_string(), Function(FunctionType::Require));
+    callstack.stack.first_mut().unwrap().insert("setmetatable".to_string(), Function(FunctionType::Native(set_metatable)));
 }
