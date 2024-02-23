@@ -13,5 +13,7 @@ fn main() {
     let args = Args::parse();
 
     let mut interpreter = Interpreter::new();
-    interpreter.evaluate_file(args.path);
+    if let Some(result) = interpreter.evaluate_file(args.path) {
+        println!("Received result: {:?}", result);
+    }
 }

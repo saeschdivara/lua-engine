@@ -20,7 +20,7 @@ impl Interpreter {
         };
     }
 
-    pub fn evaluate_file(&mut self, file_path: String) {
+    pub fn evaluate_file(&mut self, file_path: String) -> &Option<Value> {
         let contents = std::fs::read_to_string(file_path)
             .expect("Should have been able to read the file");
 
@@ -33,7 +33,7 @@ impl Interpreter {
                     "Failed to parse program: {} [{}:{}] {}",
                     err.file_path, err.line, err.column, err.message
                 );
-                return;
+                return &None;
             }
         };
 
@@ -41,9 +41,10 @@ impl Interpreter {
         add_standard_functions(&mut runtime);
 
         match self.eval_all_statements(&statements, &mut runtime) {
-            Ok(_) => {}
+            Ok(_) => &self.return_value,
             Err(err) => {
-                eprintln!("Failed eval: {}", err.message)
+                eprintln!("Failed eval: {}", err.message);
+                &None
             }
         }
     }

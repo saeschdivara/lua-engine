@@ -18,3 +18,4 @@ setmetatable(a,{__add=add_points})
 local c = a + b
 --
 print(c.x, c.y)
+return 2
