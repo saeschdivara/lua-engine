@@ -3,6 +3,9 @@ name = "lua_engine"
 version = "0.1.0"
 edition = "2021"
 
+license-file = "LICENSE"
+keywords = ["lua", "embedded-scripting"]
+
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
 gamma_macros = { path = "./lua_macros" }
