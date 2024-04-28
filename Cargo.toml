@@ -8,4 +8,4 @@ keywords = ["lua", "embedded-scripting"]
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
-gamma_macros = { path = "./lua_macros" }
+lua_engine_macros = { path = "lua_engine_macros" }

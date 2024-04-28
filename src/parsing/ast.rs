@@ -1,4 +1,4 @@
-use gamma_macros::{SmartExpression, SmartStatement};
+use lua_engine_macros::{SmartExpression, SmartStatement};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
