@@ -3,6 +3,9 @@ name = "lua_engine_macros"
 version = "0.1.0"
 edition = "2021"
 
+license-file = "../LICENSE"
+description = "proc macros for lua engine"
+
 [lib]
 proc-macro = true
 
