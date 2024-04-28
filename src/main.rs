@@ -1,8 +1,8 @@
 use clap::Parser;
 
-use my_gamma_script::evaluation::interpreter::Interpreter;
-use my_gamma_script::evaluation::runtime::Runtime;
-use my_gamma_script::evaluation::typing::{NumberType, Value};
+use lua_engine::evaluation::interpreter::Interpreter;
+use lua_engine::evaluation::runtime::Runtime;
+use lua_engine::evaluation::typing::{NumberType, Value};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
