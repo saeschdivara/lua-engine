@@ -4,6 +4,7 @@ use crate::evaluation::runtime::Runtime;
 
 use crate::parsing::ast::FunctionExpression;
 
+#[derive(Debug)]
 pub struct EvalError {
     pub message: String,
 }
